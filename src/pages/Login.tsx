@@ -11,15 +11,15 @@ export default function Login() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErro(null);
 
     try {
-      entrar(email, senha);
+      await entrar(email, senha);
       navigate("/meus-itens");
     } catch (err: any) {
-      setErro(err.message ?? "Não foi possível fazer login.");
+      setErro(err.message ?? "Nao foi possivel fazer login.");
     }
   }
 
@@ -65,7 +65,7 @@ export default function Login() {
         </button>
 
         <p className="text-xs text-gray-600">
-          Ainda não tem cadastro?{" "}
+          Ainda nao tem cadastro?{" "}
           <Link to="/cadastro-usuario" className="text-blue-700 hover:underline">
             Criar conta
           </Link>

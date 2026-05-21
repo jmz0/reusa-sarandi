@@ -198,6 +198,13 @@ export default function Itens({
     null
   );
   const [mensagemInteresse, setMensagemInteresse] = useState("");
+  const categoriasDisponiveis = Array.from(
+    new Set(
+      itens
+        .map((item) => item.categoria)
+        .filter((categoria) => categoria.trim().length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b));
 
   const termo = termoBusca.trim().toLowerCase();
 
@@ -271,14 +278,11 @@ export default function Itens({
           onChange={(e) => setCategoriaSelecionada(e.target.value)}
         >
           <option value="">Todas as categorias</option>
-          <option value="Móveis">Móveis</option>
-          <option value="Roupas">Roupas</option>
-          <option value="Eletrodomésticos">Eletrodomésticos</option>
-          <option value="Infantil">Infantil</option>
-          <option value="Eletrônicos">Eletrônicos</option>
-          <option value="Utensílios domésticos">Utensílios domésticos</option>
-          <option value="Esportes e lazer">Esportes e lazer</option>
-          <option value="Outros">Outros</option>
+          {categoriasDisponiveis.map((categoria) => (
+            <option key={categoria} value={categoria}>
+              {categoria}
+            </option>
+          ))}
         </select>
 
         <select

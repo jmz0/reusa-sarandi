@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import Home from "./pages/Home";
 import Itens from "./pages/Itens";
 import CadastrarItem from "./pages/CadastrarItem";
@@ -9,133 +10,45 @@ import CadastroUsuario from "./pages/CadastroUsuario";
 import CaixaEntrada from "./pages/CaixaEntrada";
 import PrivateRoute from "./components/PrivateRoute";
 import { useAuth } from "./context/AuthContext";
-import { useState, useEffect } from "react";
 import type { ItemDoacao } from "./types/ItemDoacao";
 import type { Thread, Mensagem } from "./types/Mensagem";
 import ItemDetalhe from "./pages/ItemDetalhe";
 import MeuPerfil from "./pages/MeuPerfil";
+import {
+  atualizarStatusItem,
+  criarItem,
+  enviarImagensItem,
+  listarItens,
+  removerItem,
+} from "./services/api";
 
-// Dados do formulário (sem id, status, criadoPorUsuario)
 type NovoItemInput = {
   titulo: string;
   descricao: string;
   categoria: string;
   bairro: string;
   estadoConservacao: ItemDoacao["estadoConservacao"];
-  imagens?: ItemDoacao["imagens"];
+  imagens: { file?: File; url: string; rotationDeg?: number }[];
 };
-
-const ITENS_KEY = "reusa_sarandi_itens";
-const THREADS_KEY = "reusa_sarandi_threads";
-const MENSAGENS_KEY = "reusa_sarandi_mensagens";
-
-// Itens iniciais (mock)
-const ITENS_INICIAIS: ItemDoacao[] = [
-  {
-    id: 1,
-    titulo: "Guarda-roupa 4 portas",
-    descricao:
-      "Guarda-roupa em MDF, usado, com pequenas marcas de uso. Necessita apenas de reaperto das dobradiças.",
-    categoria: "Móveis",
-    bairro: "Jardim São José",
-    estadoConservacao: "bom",
-    status: "disponivel",
-    criadoPorUsuario: false,
-    ownerId: 0,
-  },
-  {
-    id: 2,
-    titulo: "Conjunto de cadeiras de plástico",
-    descricao:
-      "4 cadeiras plásticas, algumas com desbotamento pelo sol, mas ainda firmes e utilizáveis.",
-    categoria: "Móveis",
-    bairro: "Jardim Panorama",
-    estadoConservacao: "regular",
-    status: "disponivel",
-    criadoPorUsuario: false,
-    ownerId: 0,
-  },
-  {
-    id: 3,
-    titulo: "Berço desmontável",
-    descricao:
-      "Berço desmontável com colchão. Um zíper do bolso lateral está com defeito, demais partes em bom estado.",
-    categoria: "Infantil",
-    bairro: "Nova Independência I",
-    estadoConservacao: "bom",
-    status: "em-negociacao",
-    criadoPorUsuario: false,
-    ownerId: 0,
-  },
-];
 
 export default function App() {
   const { usuario, sair } = useAuth();
+  const [itens, setItens] = useState<ItemDoacao[]>([]);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
 
-  const [itens, setItens] = useState<ItemDoacao[]>(() => {
-    if (typeof window === "undefined") return ITENS_INICIAIS;
-
+  const carregarItens = useCallback(async () => {
     try {
-      const salvo = window.localStorage.getItem(ITENS_KEY);
-      if (!salvo) return ITENS_INICIAIS;
-
-      const parsed = JSON.parse(salvo) as ItemDoacao[];
-      if (!Array.isArray(parsed)) return ITENS_INICIAIS;
-      return parsed;
-    } catch {
-      return ITENS_INICIAIS;
+      const itensApi = await listarItens();
+      setItens(itensApi);
+    } catch (error) {
+      console.error("Nao foi possivel carregar os itens.", error);
     }
-  });
+  }, []);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(ITENS_KEY, JSON.stringify(itens));
-    } catch {
-      // em aplicação real, registrar erro
-    }
-  }, [itens]);
-
-  const [threads, setThreads] = useState<Thread[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const salvo = window.localStorage.getItem(THREADS_KEY);
-      if (!salvo) return [];
-      const parsed = JSON.parse(salvo);
-      if (!Array.isArray(parsed)) return [];
-      return parsed as Thread[];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(THREADS_KEY, JSON.stringify(threads));
-    } catch {
-      // logar erro em app real
-    }
-  }, [threads]);
-
-  const [mensagens, setMensagens] = useState<Mensagem[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const salvo = window.localStorage.getItem(MENSAGENS_KEY);
-      if (!salvo) return [];
-      const parsed = JSON.parse(salvo);
-      if (!Array.isArray(parsed)) return [];
-      return parsed as Mensagem[];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(MENSAGENS_KEY, JSON.stringify(mensagens));
-    } catch {
-      // logar erro em app real
-    }
-  }, [mensagens]);
+    void carregarItens();
+  }, [carregarItens]);
 
   const mensagensNaoLidas = usuario
     ? mensagens.filter(
@@ -146,42 +59,53 @@ export default function App() {
   const navLinkClass =
     "px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 transition-colors";
 
-  function handleAdicionarItem(dados: NovoItemInput) {
+  async function handleAdicionarItem(dados: NovoItemInput) {
     if (!usuario) {
-      alert("Você precisa estar logado para cadastrar um item.");
+      alert("Voce precisa estar logado para cadastrar um item.");
       return;
     }
 
-    setItens((atual) => {
-      const novoId =
-        atual.length > 0 ? Math.max(...atual.map((i) => i.id)) + 1 : 1;
-
-      const novoItem: ItemDoacao = {
-        id: novoId,
-        status: "disponivel",
-        criadoPorUsuario: true,
-        ownerId: usuario.id,
-        ...dados,
-      };
-
-      return [...atual, novoItem];
+    const itemCriado = await criarItem({
+      doadorId: usuario.id,
+      titulo: dados.titulo,
+      descricao: dados.descricao,
+      categoria: dados.categoria,
+      bairro: dados.bairro,
+      estadoConservacao: dados.estadoConservacao,
     });
+
+    const imagensParaUpload = dados.imagens
+      .filter((imagem): imagem is { file: File; url: string; rotationDeg?: number } =>
+        imagem.file instanceof File
+      )
+      .map((imagem) => ({
+        file: imagem.file,
+        rotationDeg: imagem.rotationDeg,
+      }));
+
+    if (imagensParaUpload.length === 0) {
+      throw new Error("Envie pelo menos uma imagem valida.");
+    }
+
+    await enviarImagensItem(itemCriado.id, imagensParaUpload);
+
+    await carregarItens();
   }
 
   function handleIniciarInteresse(itemId: number, mensagemTexto: string) {
     if (!usuario) {
-      alert("Você precisa estar logado para manifestar interesse.");
+      alert("Voce precisa estar logado para manifestar interesse.");
       return;
     }
 
     const item = itens.find((i) => i.id === itemId);
     if (!item) {
-      alert("Item inválido para interesse.");
+      alert("Item invalido para interesse.");
       return;
     }
 
     if (item.status === "doado") {
-      alert("Este item já foi doado e não aceita novos interesses.");
+      alert("Este item ja foi doado e nao aceita novos interesses.");
       return;
     }
 
@@ -251,28 +175,29 @@ export default function App() {
     );
 
     alert(
-      "Sua mensagem foi enviada ao doador. Ele poderá visualizar pela Caixa de Entrada."
+      "Sua mensagem foi enviada ao doador. Ele podera visualizar pela Caixa de Entrada."
     );
   }
 
-  function handleAtualizarStatusItem(
+  async function handleAtualizarStatusItem(
     itemId: number,
     novoStatus: ItemDoacao["status"]
   ) {
-    setItens((atual) =>
-      atual.map((i) =>
-        i.id === itemId
-          ? {
-              ...i,
-              status: novoStatus,
-            }
-          : i
-      )
-    );
+    try {
+      await atualizarStatusItem(itemId, novoStatus);
+      await carregarItens();
+    } catch (error: any) {
+      alert(error.message ?? "Nao foi possivel atualizar o status.");
+    }
   }
 
-  function handleRemoverItem(itemId: number) {
-    setItens((atual) => atual.filter((i) => i.id !== itemId));
+  async function handleRemoverItem(itemId: number) {
+    try {
+      await removerItem(itemId);
+      await carregarItens();
+    } catch (error: any) {
+      alert(error.message ?? "Nao foi possivel remover o item.");
+    }
   }
 
   function handleEnviarMensagemNaThread(
@@ -284,7 +209,6 @@ export default function App() {
     if (!thread) return;
 
     const agora = new Date().toISOString();
-
     const toUserId =
       fromUserId === thread.donorId ? thread.receiverId : thread.donorId;
 
@@ -339,7 +263,7 @@ export default function App() {
         <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-md shadow-sm">
           <nav
             className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4"
-            aria-label="Navegação principal"
+            aria-label="Navegacao principal"
           >
             <Link
               to="/"
@@ -384,7 +308,7 @@ export default function App() {
               {usuario ? (
                 <div className="ml-1 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
                   <span className="hidden sm:inline text-xs text-slate-600">
-                    Olá, <strong>{usuario.nome}</strong>
+                    Ola, <strong>{usuario.nome}</strong>
                   </span>
                   <button
                     type="button"
@@ -487,8 +411,8 @@ export default function App() {
 
         <footer className="mt-8 border-t border-slate-200/80 bg-white/80">
           <div className="max-w-6xl mx-auto px-4 py-4 text-xs sm:text-sm text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <span>© {new Date().getFullYear()} Reusa Sarandi</span>
-            <span>Plataforma de doações e reaproveitamento em Sarandi/PR</span>
+            <span>&copy; {new Date().getFullYear()} Reusa Sarandi</span>
+            <span>Plataforma de doacoes e reaproveitamento em Sarandi/PR</span>
           </div>
         </footer>
       </div>

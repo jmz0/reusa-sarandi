@@ -52,6 +52,7 @@ CREATE TABLE imagens_item (
   nome_original TEXT NOT NULL,
   mime_type TEXT NOT NULL CHECK (mime_type LIKE 'image/%'),
   tamanho_bytes INTEGER NOT NULL CHECK (tamanho_bytes > 0),
+  rotation_deg INTEGER NOT NULL DEFAULT 0 CHECK (rotation_deg IN (0, 90, 180, 270)),
   principal INTEGER NOT NULL DEFAULT 0 CHECK (principal IN (0, 1)),
   criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (item_id) REFERENCES itens_doacao(id) ON DELETE CASCADE

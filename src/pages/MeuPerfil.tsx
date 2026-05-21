@@ -1,33 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-const PERFIS_KEY = "reusa_sarandi_perfis";
-
-type PerfilUsuarioLocal = {
-  userId: number;
-  fotoDataUrl: string;
-};
-
-function lerPerfis(): PerfilUsuarioLocal[] {
-  try {
-    const salvo = window.localStorage.getItem(PERFIS_KEY);
-    if (!salvo) return [];
-    const parsed = JSON.parse(salvo);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as PerfilUsuarioLocal[];
-  } catch {
-    return [];
-  }
-}
-
-function salvarPerfis(lista: PerfilUsuarioLocal[]) {
-  window.localStorage.setItem(PERFIS_KEY, JSON.stringify(lista));
-}
+const fotosPerfilPorUsuario = new Map<number, string>();
 
 export default function MeuPerfil() {
   const { usuario } = useAuth();
-  const [foto, setFoto] = useState<string | null>(null);
-  const [carregando, setCarregando] = useState(true);
+  const [foto, setFoto] = useState<string | null>(
+    usuario ? fotosPerfilPorUsuario.get(usuario.id) ?? null : null
+  );
 
   if (!usuario) {
     return (
@@ -36,20 +16,13 @@ export default function MeuPerfil() {
           Meu perfil
         </h1>
         <p className="mt-3 text-gray-700">
-          É necessário estar autenticado para visualizar seu perfil.
+          E necessario estar autenticado para visualizar seu perfil.
         </p>
       </section>
     );
   }
-    
-  const usuarioId = usuario.id;
 
-  useEffect(() => {
-    const perfis = lerPerfis();
-    const atual = perfis.find((p) => p.userId === usuario.id) || null;
-    setFoto(atual?.fotoDataUrl ?? null);
-    setCarregando(false);
-  }, [usuario.id]);
+  const usuarioId = usuario.id;
 
   async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -60,7 +33,7 @@ export default function MeuPerfil() {
       alert(
         `O arquivo selecionado tem ${tamanhoMB.toFixed(
           2
-        )} MB. O limite é de 3 MB.`
+        )} MB. O limite e de 3 MB.`
       );
       return;
     }
@@ -69,17 +42,10 @@ export default function MeuPerfil() {
     reader.onload = () => {
       const dataUrl = reader.result as string;
       setFoto(dataUrl);
-
-      const perfis = lerPerfis();
-      const semAtual = perfis.filter((p) => p.userId !== usuarioId);
-      const novo: PerfilUsuarioLocal = {
-        userId: usuarioId,
-        fotoDataUrl: dataUrl,
-      };
-      salvarPerfis([...semAtual, novo]);
+      fotosPerfilPorUsuario.set(usuarioId, dataUrl);
     };
     reader.onerror = () => {
-      alert("Não foi possível ler a imagem selecionada.");
+      alert("Nao foi possivel ler a imagem selecionada.");
     };
     reader.readAsDataURL(file);
 
@@ -91,9 +57,7 @@ export default function MeuPerfil() {
     if (!ok) return;
 
     setFoto(null);
-    const perfis = lerPerfis();
-    const semAtual = perfis.filter((p) => p.userId !== usuarioId);
-    salvarPerfis(semAtual);
+    fotosPerfilPorUsuario.delete(usuarioId);
   }
 
   return (
@@ -106,8 +70,8 @@ export default function MeuPerfil() {
       </h1>
 
       <p className="mt-3 text-gray-700">
-        Aqui você pode visualizar seus dados básicos e definir uma foto de
-        perfil, armazenada localmente no seu navegador nesta versão protótipo.
+        Aqui voce pode visualizar seus dados basicos e definir uma foto de
+        perfil temporaria nesta versao prototipo.
       </p>
 
       <div className="mt-6 flex flex-col sm:flex-row gap-6 items-start">
@@ -135,7 +99,6 @@ export default function MeuPerfil() {
               accept="image/*"
               onChange={handleFotoChange}
               className="text-xs"
-              disabled={carregando}
             />
           </label>
 
@@ -158,10 +121,8 @@ export default function MeuPerfil() {
             <strong>E-mail:</strong> {usuario.email}
           </p>
           <p className="text-xs text-gray-500 mt-4">
-            Nesta versão da aplicação, os dados de login são armazenados em
-            <em> localStorage</em> para fins de demonstração. Em uma evolução
-            futura, o sistema poderá ser integrado a um backend completo, com
-            autenticação segura e armazenamento em banco de dados.
+            Nesta etapa, a sessao do usuario autenticado fica salva localmente.
+            Os dados principais de usuarios e itens sao carregados pelo backend.
           </p>
         </div>
       </div>

@@ -23,6 +23,7 @@ function mapImagem(row) {
     nomeOriginal: row.nome_original,
     mimeType: row.mime_type,
     tamanhoBytes: row.tamanho_bytes,
+    rotationDeg: row.rotation_deg,
     principal: Boolean(row.principal),
     criadoEm: row.criado_em
   };
@@ -51,7 +52,7 @@ async function itemExiste(db, itemId) {
 
 async function getImagens(db, itemId) {
   const rows = await db.all(
-    `SELECT id, item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, principal, criado_em
+    `SELECT id, item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, rotation_deg, principal, criado_em
      FROM imagens_item
      WHERE item_id = ?
      ORDER BY principal DESC, criado_em ASC, id ASC`,
@@ -125,7 +126,7 @@ router.get("/itens", async (req, res, next) => {
     );
 
     const imagens = await db.all(
-      `SELECT id, item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, principal, criado_em
+      `SELECT id, item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, rotation_deg, principal, criado_em
        FROM imagens_item
        ORDER BY principal DESC, criado_em ASC, id ASC`
     );
@@ -290,6 +291,9 @@ router.delete("/itens/:id", async (req, res, next) => {
 router.post("/itens/:id/imagens", upload.array("imagens", 5), async (req, res, next) => {
   const id = toId(req.params.id);
   const files = req.files || [];
+  const rotationValues = Array.isArray(req.body.rotationDeg)
+    ? req.body.rotationDeg
+    : [req.body.rotationDeg];
 
   try {
     if (!id) {
@@ -316,11 +320,15 @@ router.post("/itens/:id/imagens", upload.array("imagens", 5), async (req, res, n
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
         const principal = imagensAtuais.length === 0 && index === 0 ? 1 : 0;
+        const rotationDeg = Number(rotationValues[index] ?? 0);
+        const rotation = [0, 90, 180, 270].includes(rotationDeg)
+          ? rotationDeg
+          : 0;
 
         await db.run(
           `INSERT INTO imagens_item
-            (item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, principal)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            (item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, rotation_deg, principal)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             `/uploads/${file.filename}`,
@@ -328,6 +336,7 @@ router.post("/itens/:id/imagens", upload.array("imagens", 5), async (req, res, n
             file.originalname,
             file.mimetype,
             file.size,
+            rotation,
             principal
           ]
         );

@@ -40,7 +40,7 @@ SET status = :status,
 WHERE id = :id;
 
 -- Imagens de um item.
-SELECT id, item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, principal, criado_em
+SELECT id, item_id, caminho, nome_arquivo, nome_original, mime_type, tamanho_bytes, rotation_deg, principal, criado_em
 FROM imagens_item
 WHERE item_id = :item_id
 ORDER BY principal DESC, criado_em ASC;
