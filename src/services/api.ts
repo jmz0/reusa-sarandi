@@ -1,5 +1,6 @@
 import type { ItemDoacao } from "../types/ItemDoacao";
 import type { Usuario } from "../context/AuthContext";
+import type { Mensagem, Thread } from "../types/Mensagem";
 
 export const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:3001"
@@ -44,6 +45,30 @@ type NovoItemApiInput = {
 type ImagemUploadInput = {
   file: File;
   rotationDeg?: number;
+};
+
+type ApiThread = {
+  id: number;
+  itemId: number;
+  itemTitulo?: string;
+  doadorId: number;
+  doadorNome?: string;
+  interessadoId: number;
+  interessadoNome?: string;
+  status: string;
+  naoLidas?: number;
+  criadoEm: string;
+  atualizadoEm: string;
+};
+
+type ApiMensagem = {
+  id: number;
+  threadId: number;
+  remetenteId: number;
+  remetenteNome?: string;
+  texto: string;
+  lida: boolean;
+  criadoEm: string;
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -144,6 +169,38 @@ function mapItem(item: ApiItem): ItemDoacao {
   };
 }
 
+function mapThread(thread: ApiThread): Thread {
+  return {
+    id: thread.id,
+    itemId: thread.itemId,
+    donorId: thread.doadorId,
+    receiverId: thread.interessadoId,
+    createdAt: thread.criadoEm,
+    lastUpdatedAt: thread.atualizadoEm,
+    status: thread.status === "arquivada" ? "encerrada" : "aberta",
+    itemTitulo: thread.itemTitulo,
+    donorNome: thread.doadorNome,
+    receiverNome: thread.interessadoNome,
+    naoLidas: thread.naoLidas ?? 0,
+  };
+}
+
+function mapMensagem(mensagem: ApiMensagem, thread: Thread): Mensagem {
+  const fromUserId = mensagem.remetenteId;
+  const toUserId =
+    fromUserId === thread.donorId ? thread.receiverId : thread.donorId;
+
+  return {
+    id: mensagem.id,
+    threadId: mensagem.threadId,
+    fromUserId,
+    toUserId,
+    body: mensagem.texto,
+    createdAt: mensagem.criadoEm,
+    lidaPeloDestinatario: mensagem.lida,
+  };
+}
+
 export async function cadastrarUsuario(
   nome: string,
   email: string,
@@ -229,5 +286,63 @@ export async function atualizarStatusItem(
 export async function removerItem(itemId: number): Promise<void> {
   await request(`/api/itens/${itemId}`, {
     method: "DELETE",
+  });
+}
+
+export async function listarThreadsUsuario(usuarioId: number): Promise<Thread[]> {
+  const data = await request<{ threads: ApiThread[] }>(
+    `/api/threads/usuario/${usuarioId}`
+  );
+
+  return data.threads.map(mapThread);
+}
+
+export async function criarOuReutilizarThread(
+  itemId: number,
+  interessadoId: number
+): Promise<Thread> {
+  const data = await request<{ thread: ApiThread }>("/api/threads", {
+    method: "POST",
+    body: JSON.stringify({ itemId, interessadoId }),
+  });
+
+  return mapThread(data.thread);
+}
+
+export async function listarMensagensThread(
+  thread: Thread,
+  usuarioId: number
+): Promise<Mensagem[]> {
+  const data = await request<{ mensagens: ApiMensagem[] }>(
+    `/api/mensagens/thread/${thread.id}?usuarioId=${usuarioId}`
+  );
+
+  return data.mensagens.map((mensagem) => mapMensagem(mensagem, thread));
+}
+
+export async function enviarMensagemThread(
+  thread: Thread,
+  remetenteId: number,
+  texto: string
+): Promise<Mensagem> {
+  const data = await request<{ mensagem: ApiMensagem }>("/api/mensagens", {
+    method: "POST",
+    body: JSON.stringify({
+      threadId: thread.id,
+      remetenteId,
+      texto,
+    }),
+  });
+
+  return mapMensagem(data.mensagem, thread);
+}
+
+export async function marcarMensagensThreadLidas(
+  threadId: number,
+  usuarioId: number
+): Promise<void> {
+  await request(`/api/mensagens/thread/${threadId}/lidas`, {
+    method: "PATCH",
+    body: JSON.stringify({ usuarioId }),
   });
 }

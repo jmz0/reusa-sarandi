@@ -16,9 +16,14 @@ import ItemDetalhe from "./pages/ItemDetalhe";
 import MeuPerfil from "./pages/MeuPerfil";
 import {
   atualizarStatusItem,
+  criarOuReutilizarThread,
   criarItem,
+  enviarMensagemThread,
   enviarImagensItem,
+  listarMensagensThread,
   listarItens,
+  listarThreadsUsuario,
+  marcarMensagensThreadLidas,
   removerItem,
 } from "./services/api";
 
@@ -46,14 +51,31 @@ export default function App() {
     }
   }, []);
 
+  const carregarThreads = useCallback(async () => {
+    if (!usuario) {
+      setThreads([]);
+      setMensagens([]);
+      return;
+    }
+
+    try {
+      const threadsApi = await listarThreadsUsuario(usuario.id);
+      setThreads(threadsApi);
+    } catch (error) {
+      console.error("Nao foi possivel carregar as conversas.", error);
+    }
+  }, [usuario]);
+
   useEffect(() => {
     void carregarItens();
   }, [carregarItens]);
 
+  useEffect(() => {
+    void carregarThreads();
+  }, [carregarThreads]);
+
   const mensagensNaoLidas = usuario
-    ? mensagens.filter(
-        (m) => m.toUserId === usuario.id && !m.lidaPeloDestinatario
-      ).length
+    ? threads.reduce((total, thread) => total + (thread.naoLidas ?? 0), 0)
     : 0;
 
   const navLinkClass =
@@ -92,7 +114,7 @@ export default function App() {
     await carregarItens();
   }
 
-  function handleIniciarInteresse(itemId: number, mensagemTexto: string) {
+  async function handleIniciarInteresse(itemId: number, mensagemTexto: string) {
     if (!usuario) {
       alert("Voce precisa estar logado para manifestar interesse.");
       return;
@@ -109,74 +131,22 @@ export default function App() {
       return;
     }
 
-    const donorId = item.ownerId ?? 0;
-    const receiverId = usuario.id;
-    const agora = new Date().toISOString();
+    try {
+      const thread = await criarOuReutilizarThread(itemId, usuario.id);
+      await enviarMensagemThread(thread, usuario.id, mensagemTexto);
 
-    let threadExistente = threads.find(
-      (t) =>
-        t.itemId === itemId &&
-        t.donorId === donorId &&
-        t.receiverId === receiverId &&
-        t.status === "aberta"
-    );
+      if (item.status === "disponivel") {
+        await atualizarStatusItem(itemId, "em-negociacao");
+      }
 
-    let threadId: number;
+      await Promise.all([carregarItens(), carregarThreads()]);
 
-    if (!threadExistente) {
-      const novoId =
-        threads.length > 0 ? Math.max(...threads.map((t) => t.id)) + 1 : 1;
-
-      const novaThread: Thread = {
-        id: novoId,
-        itemId,
-        donorId,
-        receiverId,
-        createdAt: agora,
-        lastUpdatedAt: agora,
-        status: "aberta",
-      };
-
-      setThreads((atual) => [...atual, novaThread]);
-      threadId = novoId;
-      threadExistente = novaThread;
-    } else {
-      threadId = threadExistente.id;
-      setThreads((atual) =>
-        atual.map((t) =>
-          t.id === threadId ? { ...t, lastUpdatedAt: agora } : t
-        )
+      alert(
+        "Sua mensagem foi enviada ao doador. Ele podera visualizar pela Caixa de Entrada."
       );
+    } catch (error: any) {
+      alert(error.message ?? "Nao foi possivel registrar o interesse.");
     }
-
-    setMensagens((atual) => {
-      const novoId =
-        atual.length > 0 ? Math.max(...atual.map((m) => m.id)) + 1 : 1;
-
-      const novaMensagem: Mensagem = {
-        id: novoId,
-        threadId,
-        fromUserId: receiverId,
-        toUserId: donorId,
-        body: mensagemTexto,
-        createdAt: agora,
-        lidaPeloDestinatario: false,
-      };
-
-      return [...atual, novaMensagem];
-    });
-
-    setItens((atual) =>
-      atual.map((i) =>
-        i.id === itemId && i.status === "disponivel"
-          ? { ...i, status: "em-negociacao" }
-          : i
-      )
-    );
-
-    alert(
-      "Sua mensagem foi enviada ao doador. Ele podera visualizar pela Caixa de Entrada."
-    );
   }
 
   async function handleAtualizarStatusItem(
@@ -200,7 +170,24 @@ export default function App() {
     }
   }
 
-  function handleEnviarMensagemNaThread(
+  async function handleCarregarMensagensThread(threadId: number) {
+    if (!usuario) return;
+
+    const thread = threads.find((t) => t.id === threadId);
+    if (!thread) return;
+
+    try {
+      const mensagensApi = await listarMensagensThread(thread, usuario.id);
+      setMensagens((atuais) => [
+        ...atuais.filter((mensagem) => mensagem.threadId !== threadId),
+        ...mensagensApi,
+      ]);
+    } catch (error: any) {
+      alert(error.message ?? "Nao foi possivel carregar as mensagens.");
+    }
+  }
+
+  async function handleEnviarMensagemNaThread(
     threadId: number,
     fromUserId: number,
     body: string
@@ -208,53 +195,26 @@ export default function App() {
     const thread = threads.find((t) => t.id === threadId);
     if (!thread) return;
 
-    const agora = new Date().toISOString();
-    const toUserId =
-      fromUserId === thread.donorId ? thread.receiverId : thread.donorId;
-
-    setMensagens((atual) => {
-      const novoId =
-        atual.length > 0 ? Math.max(...atual.map((m) => m.id)) + 1 : 1;
-
-      const novaMensagem: Mensagem = {
-        id: novoId,
-        threadId,
-        fromUserId,
-        toUserId,
-        body,
-        createdAt: agora,
-        lidaPeloDestinatario: false,
-      };
-
-      return [...atual, novaMensagem];
-    });
-
-    setThreads((atual) =>
-      atual.map((t) =>
-        t.id === threadId ? { ...t, lastUpdatedAt: agora } : t
-      )
-    );
+    try {
+      await enviarMensagemThread(thread, fromUserId, body);
+      await handleCarregarMensagensThread(threadId);
+      await carregarThreads();
+    } catch (error: any) {
+      alert(error.message ?? "Nao foi possivel enviar a mensagem.");
+    }
   }
 
-  function handleMarcarMensagensComoLidas(
+  async function handleMarcarMensagensComoLidas(
     threadId: number,
     destinatarioId: number
   ) {
-    setMensagens((atual) => {
-      let alterou = false;
-      const atualizado = atual.map((m) => {
-        if (
-          m.threadId === threadId &&
-          m.toUserId === destinatarioId &&
-          !m.lidaPeloDestinatario
-        ) {
-          alterou = true;
-          return { ...m, lidaPeloDestinatario: true };
-        }
-        return m;
-      });
-      return alterou ? atualizado : atual;
-    });
+    try {
+      await marcarMensagensThreadLidas(threadId, destinatarioId);
+      await handleCarregarMensagensThread(threadId);
+      await carregarThreads();
+    } catch (error: any) {
+      alert(error.message ?? "Nao foi possivel marcar mensagens como lidas.");
+    }
   }
 
   return (
@@ -388,6 +348,7 @@ export default function App() {
                     mensagens={mensagens}
                     itens={itens}
                     onEnviarMensagem={handleEnviarMensagemNaThread}
+                    onCarregarMensagens={handleCarregarMensagensThread}
                     onMarcarMensagensComoLidas={handleMarcarMensagensComoLidas}
                   />
                 </PrivateRoute>

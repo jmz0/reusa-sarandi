@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 
 type ItensProps = {
   itens: ItemDoacao[];
-  onIniciarInteresse: (itemId: number, mensagem: string) => void;
+  onIniciarInteresse: (itemId: number, mensagem: string) => void | Promise<void>;
 };
 
 function labelEstado(estado: ItemDoacao["estadoConservacao"]): string {
@@ -236,7 +236,7 @@ export default function Itens({
     setMensagemInteresse("");
   }
 
-  function confirmarInteresse() {
+  async function confirmarInteresse() {
     if (!itemSelecionado) return;
     const texto = mensagemInteresse.trim();
     if (!texto) {
@@ -244,7 +244,7 @@ export default function Itens({
       return;
     }
 
-    onIniciarInteresse(itemSelecionado.id, texto);
+    await onIniciarInteresse(itemSelecionado.id, texto);
     fecharModal();
   }
 

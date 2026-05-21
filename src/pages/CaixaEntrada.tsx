@@ -13,11 +13,16 @@ type CaixaEntradaProps = {
   threads: Thread[];
   mensagens: Mensagem[];
   itens: ItemDoacao[];
-  onEnviarMensagem: (threadId: number, fromUserId: number, body: string) => void;
+  onEnviarMensagem: (
+    threadId: number,
+    fromUserId: number,
+    body: string
+  ) => void | Promise<void>;
+  onCarregarMensagens: (threadId: number) => void | Promise<void>;
   onMarcarMensagensComoLidas: (
     threadId: number,
     destinatarioId: number
-  ) => void;
+  ) => void | Promise<void>;
 };
 
 export default function CaixaEntrada({
@@ -25,6 +30,7 @@ export default function CaixaEntrada({
   mensagens,
   itens,
   onEnviarMensagem,
+  onCarregarMensagens,
   onMarcarMensagensComoLidas,
 }: CaixaEntradaProps) {
   const { usuario, obterUsuarioPorId } = useAuth();
@@ -32,51 +38,53 @@ export default function CaixaEntrada({
     useState<number | null>(null);
   const [novaMensagem, setNovaMensagem] = useState("");
 
-  if (!usuario) {
+  const usuarioId = usuario?.id;
+
+  useEffect(() => {
+    if (!threadSelecionadaId || !usuarioId) return;
+
+    void (async () => {
+      await onCarregarMensagens(threadSelecionadaId);
+      await onMarcarMensagensComoLidas(threadSelecionadaId, usuarioId);
+    })();
+  }, [threadSelecionadaId, usuarioId]);
+
+  if (!usuario || !usuarioId) {
     return (
       <section className="max-w-3xl">
         <h1 className="text-2xl font-bold text-gray-900">Caixa de Entrada</h1>
         <p className="mt-3 text-gray-700">
-          É necessário estar autenticado para visualizar suas conversas.
+          E necessario estar autenticado para visualizar suas conversas.
         </p>
       </section>
     );
   }
 
-  const usuarioId = usuario.id;
-
-  // Threads em que o usuário participa
   const minhasThreads = threads.filter(
     (t) => t.donorId === usuarioId || t.receiverId === usuarioId
   );
 
-  // Enriquecer com nome do outro usuário, título do item e contagem de não lidas
   const threadsComInfo: ThreadComInfo[] = minhasThreads.map((t) => {
     const outroUsuarioId = t.donorId === usuarioId ? t.receiverId : t.donorId;
-
     const outroUsuario = obterUsuarioPorId(outroUsuarioId);
-    const outroUsuarioNome = outroUsuario?.nome ?? `Usuário #${outroUsuarioId}`;
+    const outroUsuarioNome =
+      t.donorId === usuarioId
+        ? t.receiverNome ?? outroUsuario?.nome ?? `Usuario #${outroUsuarioId}`
+        : t.donorNome ?? outroUsuario?.nome ?? `Usuario #${outroUsuarioId}`;
 
     const item = itens.find((i) => i.id === t.itemId);
-    const itemTitulo = item ? item.titulo : `Item #${t.itemId}`;
-
-    const naoLidas = mensagens.filter(
-      (m) =>
-        m.threadId === t.id &&
-        m.toUserId === usuarioId &&
-        !m.lidaPeloDestinatario
-    ).length;
+    const itemTitulo = t.itemTitulo ?? item?.titulo ?? `Item #${t.itemId}`;
 
     return {
       ...t,
       outroUsuarioNome,
       itemTitulo,
-      naoLidas,
+      naoLidas: t.naoLidas ?? 0,
     };
   });
 
   const threadsOrdenadas = [...threadsComInfo].sort((a, b) =>
-      b.lastUpdatedAt.localeCompare(a.lastUpdatedAt)
+    b.lastUpdatedAt.localeCompare(a.lastUpdatedAt)
   );
 
   const threadSelecionada = threadsComInfo.find(
@@ -89,21 +97,15 @@ export default function CaixaEntrada({
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     : [];
 
-  // Ao selecionar thread, marcar mensagens recebidas como lidas
-  useEffect(() => {
-    if (!threadSelecionadaId) return;
-    onMarcarMensagensComoLidas(threadSelecionadaId, usuarioId);
-  }, [threadSelecionadaId, usuarioId, onMarcarMensagensComoLidas]);
-
   function handleSelecionarThread(id: number) {
     setThreadSelecionadaId(id);
   }
 
-  function handleEnviarMensagem() {
-    if (!threadSelecionada || !novaMensagem.trim()) return;
+  async function handleEnviarMensagem() {
+    if (!threadSelecionada || !novaMensagem.trim() || !usuarioId) return;
 
     const texto = novaMensagem.trim();
-    onEnviarMensagem(threadSelecionada.id, usuarioId, texto);
+    await onEnviarMensagem(threadSelecionada.id, usuarioId, texto);
     setNovaMensagem("");
   }
 
@@ -120,19 +122,16 @@ export default function CaixaEntrada({
       </h1>
 
       <p className="text-sm text-gray-700 mb-4">
-        Aqui são exibidas as conversas entre doadores e receptores. Nesta versão,
-        as mensagens são armazenadas localmente no seu navegador, apenas para fins
-        de demonstração do fluxo da plataforma.
+        Aqui sao exibidas as conversas entre doadores e receptores.
       </p>
 
       {threadsComInfo.length === 0 ? (
         <p className="text-gray-600">
-          Você ainda não possui conversas. Demonstre interesse em um item para
+          Voce ainda nao possui conversas. Demonstre interesse em um item para
           iniciar uma troca de mensagens com o doador.
         </p>
       ) : (
         <div className="grid gap-4 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-          {/* Lista de conversas */}
           <div className="border rounded-lg bg-white shadow-sm max-h-[480px] overflow-y-auto">
             {threadsOrdenadas.map((t) => (
               <button
@@ -160,7 +159,6 @@ export default function CaixaEntrada({
             ))}
           </div>
 
-          {/* Área de mensagens */}
           <div className="border rounded-lg bg-white shadow-sm flex flex-col max-h-[480px]">
             {!threadSelecionada ? (
               <div className="p-4 text-gray-600 text-sm">
@@ -177,9 +175,8 @@ export default function CaixaEntrada({
                     Sobre: {threadSelecionada.itemTitulo}
                   </span>
                   <span className="text-[10px] text-gray-500">
-                    Qualquer dado de contato (telefone, e-mail, endereço) é
-                    compartilhado diretamente pelo doador nas mensagens, a critério
-                    dele.
+                    Qualquer dado de contato e compartilhado diretamente pelo
+                    doador nas mensagens, a criterio dele.
                   </span>
                 </div>
 
@@ -190,23 +187,21 @@ export default function CaixaEntrada({
                     </p>
                   ) : (
                     mensagensDaThreadSelecionada.map((m) => {
-                      // receptor = quem demonstrou interesse
-                      const ehDoReceptor =
-                        m.fromUserId === threadSelecionada.receiverId;
+                      const ehMinha = m.fromUserId === usuarioId;
 
                       return (
                         <div
                           key={m.id}
                           className={`flex ${
-                            ehDoReceptor ? "justify-end" : "justify-start"
+                            ehMinha ? "justify-end" : "justify-start"
                           }`}
                         >
                           <div
                             className={
                               "max-w-[75%] rounded-lg px-3 py-2 " +
-                              (ehDoReceptor
-                                ? "bg-gray-200 text-gray-900" // receptor: direita, cinza
-                                : "bg-green-600 text-white") // doador: esquerda, verde
+                              (ehMinha
+                                ? "bg-gray-200 text-gray-900"
+                                : "bg-green-600 text-white")
                             }
                           >
                             <p className="whitespace-pre-line">{m.body}</p>

@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 
 type ItemDetalheProps = {
   itens: ItemDoacao[];
-  onIniciarInteresse: (itemId: number, mensagem: string) => void;
+  onIniciarInteresse: (itemId: number, mensagem: string) => void | Promise<void>;
 };
 
 export default function ItemDetalhe({
@@ -50,7 +50,7 @@ export default function ItemDetalhe({
   const isDoador = usuario && item.ownerId && item.ownerId === usuario.id;
   const isDoado = item.status === "doado";
 
-  function handleEnviarInteresse() {
+  async function handleEnviarInteresse() {
     if (isDoado) {
       alert("Este item já foi doado e não aceita novos interesses.");
       return;
@@ -72,7 +72,7 @@ export default function ItemDetalhe({
       return;
     }
 
-    onIniciarInteresse(itemNaoNulo.id, texto);
+    await onIniciarInteresse(itemNaoNulo.id, texto);
     setMensagem("");
   }
 

@@ -18,6 +18,7 @@ function mapThread(row) {
     interessadoId: row.interessado_id,
     interessadoNome: row.interessado_nome,
     status: row.status,
+    naoLidas: row.nao_lidas || 0,
     criadoEm: row.criado_em,
     atualizadoEm: row.atualizado_em
   };
@@ -67,14 +68,21 @@ router.get("/threads/usuario/:usuarioId", async (req, res, next) => {
 
     const db = await getDb();
     const rows = await db.all(
-      `SELECT t.*, i.titulo AS item_titulo, d.nome AS doador_nome, a.nome AS interessado_nome
+      `SELECT t.*, i.titulo AS item_titulo, d.nome AS doador_nome, a.nome AS interessado_nome,
+              (
+                SELECT COUNT(*)
+                FROM mensagens m
+                WHERE m.thread_id = t.id
+                  AND m.remetente_id <> ?
+                  AND m.lida = 0
+              ) AS nao_lidas
        FROM threads t
        JOIN itens_doacao i ON i.id = t.item_id
        JOIN usuarios d ON d.id = t.doador_id
        JOIN usuarios a ON a.id = t.interessado_id
        WHERE t.doador_id = ? OR t.interessado_id = ?
        ORDER BY t.atualizado_em DESC, t.id DESC`,
-      [usuarioId, usuarioId]
+      [usuarioId, usuarioId, usuarioId]
     );
 
     return res.json({ threads: rows.map(mapThread) });
