@@ -1,16 +1,53 @@
-# Backend Reusa Sarandi
+﻿# Backend Reusa Sarandi
 
-Implementacao inicial do backend do Modulo 3. O frontend React da raiz do projeto nao foi alterado.
+Backend do Modulo 3 do projeto Reusa Sarandi.
+
+O objetivo deste backend e fornecer uma API simples para o frontend React, com persistencia em SQLite, modelagem relacional, autenticacao basica, gerenciamento de itens, upload local de imagens, fluxo de interesse, threads e mensagens.
 
 ## Tecnologias
 
 - Node.js
 - Express
-- SQLite com `sqlite` e `sqlite3`
-- Multer para upload local de imagens
-- CORS habilitado para testes locais
+- SQLite
+- `sqlite`
+- `sqlite3`
+- Multer
+- CORS
 
-## Instalar
+## Estrutura da pasta `backend`
+
+```text
+backend/
+  database/
+    schema.sql
+    seed.sql
+    queries.sql
+  src/
+    db.js
+    server.js
+    routes/
+      auth.js
+      itens.js
+      mensagens.js
+  uploads/
+    .gitkeep
+  package.json
+  README.md
+```
+
+## Arquivos SQL
+
+- `database/schema.sql`: define as tabelas, chaves primarias, chaves estrangeiras, constraints, checks, defaults e indices.
+- `database/seed.sql`: insere dados iniciais para facilitar testes locais.
+- `database/queries.sql`: registra consultas SQL principais como referencia de modelagem e manutencao.
+
+O banco local gerado pelo projeto fica em:
+
+```text
+backend/database/reusa-sarandi.sqlite
+```
+
+## Instalar dependencias
 
 ```bash
 cd backend
@@ -23,9 +60,9 @@ npm install
 npm run init-db
 ```
 
-Esse comando cria `database/reusa-sarandi.sqlite`, aplica `database/schema.sql` e popula dados iniciais de `database/seed.sql`.
+Esse comando aplica `schema.sql` e `seed.sql`. Como o schema derruba e recria as tabelas, use esse comando com cuidado quando houver dados de teste que voce queira preservar.
 
-## Executar
+## Rodar o servidor
 
 Modo desenvolvimento:
 
@@ -39,94 +76,51 @@ Modo normal:
 npm start
 ```
 
-O servidor roda em `http://localhost:3001` e escuta em `0.0.0.0`, permitindo testes por outros dispositivos na mesma rede usando o IP da maquina.
+O servidor roda em:
 
-## Uploads
+```text
+http://localhost:3001
+```
 
-As imagens enviadas por `POST /api/itens/:id/imagens` sao salvas em:
+Ele escuta em `0.0.0.0`, permitindo testes por outros dispositivos na mesma rede quando o firewall e a rede permitirem.
+
+## Upload local de imagens
+
+As imagens enviadas por `POST /api/itens/:id/imagens` sao salvas localmente em:
 
 ```text
 backend/uploads
 ```
 
-O banco salva caminho publico, nome do arquivo, nome original, MIME type, tamanho em bytes e indicador de imagem principal. Os arquivos ficam acessiveis por `/uploads/nome-do-arquivo`.
+O banco salva metadados da imagem, incluindo caminho publico, nome do arquivo, nome original, MIME type, tamanho, rotacao e indicador de imagem principal.
 
-## Endpoints
+Os arquivos ficam disponiveis publicamente pelo backend em:
+
+```text
+/uploads/nome-do-arquivo
+```
+
+## Endpoints principais
 
 ### Saude
 
 - `GET /api/health`
 
-### Auth e usuarios
+### Autenticacao e usuarios
 
 - `POST /api/auth/cadastro`
 - `POST /api/auth/login`
 - `GET /api/usuarios/:id`
 
-Exemplo de cadastro:
-
-```json
-{
-  "nome": "Maria Silva",
-  "email": "maria@example.com",
-  "senha": "1234",
-  "telefone": "(44) 99999-1234",
-  "bairro": "Centro"
-}
-```
-
-Exemplo de login:
-
-```json
-{
-  "email": "ana@reusa.local",
-  "senha": "1234"
-}
-```
-
 ### Itens
 
 - `GET /api/itens`
-- `GET /api/itens?status=disponivel`
-- `GET /api/itens?categoria=moveis`
 - `GET /api/itens/:id`
 - `POST /api/itens`
 - `PATCH /api/itens/:id/status`
 - `DELETE /api/itens/:id`
 - `POST /api/itens/:id/imagens`
 - `GET /api/itens/:id/imagens`
-
-Exemplo de criacao de item:
-
-```json
-{
-  "doadorId": 1,
-  "titulo": "Armario pequeno",
-  "descricao": "Armario usado em bom estado.",
-  "categoria": "moveis",
-  "estadoConservacao": "bom",
-  "localizacao": "Centro"
-}
-```
-
-Status aceitos:
-
-```text
-disponivel, reservado, doado, cancelado
-```
-
-Estados de conservacao aceitos:
-
-```text
-novo, bom, usado, precisa_reparo
-```
-
-Upload com `curl`:
-
-```bash
-curl -X POST http://localhost:3001/api/itens/1/imagens \
-  -F "imagens=@/caminho/para/imagem.jpg"
-```
 
 ### Threads e mensagens
 
@@ -136,36 +130,135 @@ curl -X POST http://localhost:3001/api/itens/1/imagens \
 - `POST /api/mensagens`
 - `PATCH /api/mensagens/thread/:threadId/lidas`
 
-Exemplo de criacao de thread:
+## Exemplos de requisicoes
 
-```json
-{
-  "itemId": 1,
-  "interessadoId": 2
-}
+### Cadastro de usuario
+
+```bash
+curl -X POST http://localhost:3001/api/auth/cadastro \
+  -H "Content-Type: application/json" \
+  -d "{\"nome\":\"Maria Silva\",\"email\":\"maria@example.com\",\"senha\":\"1234\"}"
 ```
 
-Exemplo de mensagem:
+### Login
 
-```json
-{
-  "threadId": 1,
-  "remetenteId": 2,
-  "texto": "Ainda esta disponivel?"
-}
+```bash
+curl -X POST http://localhost:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"ana@reusa.local\",\"senha\":\"1234\"}"
 ```
 
-Exemplo para marcar mensagens como lidas:
+### Listar itens
 
-```json
-{
-  "usuarioId": 1
-}
+```bash
+curl http://localhost:3001/api/itens
 ```
 
-## Observacoes
+### Criar item
 
-- JWT nao foi implementado nesta etapa.
-- Hash de senha nao foi implementado nesta etapa.
-- WebSocket nao foi implementado nesta etapa.
-- Upload em nuvem nao foi implementado nesta etapa.
+```bash
+curl -X POST http://localhost:3001/api/itens \
+  -H "Content-Type: application/json" \
+  -d "{\"doadorId\":1,\"titulo\":\"Armario pequeno\",\"descricao\":\"Armario usado em bom estado.\",\"categoria\":\"moveis\",\"estadoConservacao\":\"bom\",\"localizacao\":\"Centro\"}"
+```
+
+### Atualizar status de item
+
+```bash
+curl -X PATCH http://localhost:3001/api/itens/1/status \
+  -H "Content-Type: application/json" \
+  -d "{\"status\":\"reservado\"}"
+```
+
+Status aceitos pelo backend:
+
+```text
+disponivel, reservado, doado, cancelado
+```
+
+Estados de conservacao aceitos pelo backend:
+
+```text
+novo, bom, usado, precisa_reparo
+```
+
+### Upload de imagens de item
+
+```bash
+curl -X POST http://localhost:3001/api/itens/1/imagens \
+  -F "imagens=@/caminho/para/imagem.jpg" \
+  -F "rotationDeg=0"
+```
+
+### Criar ou reutilizar thread
+
+```bash
+curl -X POST http://localhost:3001/api/threads \
+  -H "Content-Type: application/json" \
+  -d "{\"itemId\":1,\"interessadoId\":2}"
+```
+
+### Listar threads de um usuario
+
+```bash
+curl http://localhost:3001/api/threads/usuario/1
+```
+
+### Enviar mensagem
+
+```bash
+curl -X POST http://localhost:3001/api/mensagens \
+  -H "Content-Type: application/json" \
+  -d "{\"threadId\":1,\"remetenteId\":2,\"texto\":\"Ainda esta disponivel?\"}"
+```
+
+### Listar mensagens de uma thread
+
+```bash
+curl "http://localhost:3001/api/mensagens/thread/1?usuarioId=1"
+```
+
+O backend verifica se o usuario informado participa da thread.
+
+### Marcar mensagens como lidas
+
+```bash
+curl -X PATCH http://localhost:3001/api/mensagens/thread/1/lidas \
+  -H "Content-Type: application/json" \
+  -d "{\"usuarioId\":1}"
+```
+
+## Observacoes importantes
+
+- A autenticacao e simples, sem JWT.
+- Senhas nao usam hash nesta etapa.
+- SQLite e usado como banco local para fins academicos e de prototipacao.
+- O upload de imagens e local; nao ha upload em nuvem.
+- Nao ha WebSocket; o frontend usa polling simples para Caixa de Entrada e mensagens nao lidas.
+- O `localStorage` pertence ao frontend e deve ser usado apenas para a sessao do usuario autenticado atual.
+
+## Teste em outros dispositivos na mesma rede
+
+Para acessar de outro dispositivo:
+
+1. Rode o backend escutando em `0.0.0.0`:
+
+```bash
+cd backend
+npm run dev
+```
+
+2. Rode o frontend com Vite tambem exposto na rede:
+
+```bash
+npm run dev -- --host 0.0.0.0
+```
+
+3. Configure o frontend com o IP da maquina que esta rodando o backend:
+
+```powershell
+$env:VITE_API_URL="http://SEU-IP-LOCAL:3001"
+npm run dev -- --host 0.0.0.0
+```
+
+Use o endereco mostrado pelo Vite no outro dispositivo. O backend e o frontend precisam estar acessiveis pela rede local.
