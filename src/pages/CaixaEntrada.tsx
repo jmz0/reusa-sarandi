@@ -19,6 +19,7 @@ type CaixaEntradaProps = {
     body: string
   ) => void | Promise<void>;
   onCarregarMensagens: (threadId: number) => void | Promise<void>;
+  onAtualizarThreads: () => void | Promise<void>;
   onMarcarMensagensComoLidas: (
     threadId: number,
     destinatarioId: number
@@ -31,6 +32,7 @@ export default function CaixaEntrada({
   itens,
   onEnviarMensagem,
   onCarregarMensagens,
+  onAtualizarThreads,
   onMarcarMensagensComoLidas,
 }: CaixaEntradaProps) {
   const { usuario, obterUsuarioPorId } = useAuth();
@@ -48,6 +50,34 @@ export default function CaixaEntrada({
       await onMarcarMensagensComoLidas(threadSelecionadaId, usuarioId);
     })();
   }, [threadSelecionadaId, usuarioId]);
+
+  useEffect(() => {
+    if (!usuarioId) return;
+
+    const intervalId = window.setInterval(() => {
+      void onAtualizarThreads();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [usuarioId, onAtualizarThreads]);
+
+  useEffect(() => {
+    if (!threadSelecionadaId || !usuarioId) return;
+
+    const intervalId = window.setInterval(() => {
+      void (async () => {
+        await onCarregarMensagens(threadSelecionadaId);
+        await onMarcarMensagensComoLidas(threadSelecionadaId, usuarioId);
+      })();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [
+    threadSelecionadaId,
+    usuarioId,
+    onCarregarMensagens,
+    onMarcarMensagensComoLidas,
+  ]);
 
   if (!usuario || !usuarioId) {
     return (

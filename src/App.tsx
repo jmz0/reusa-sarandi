@@ -14,6 +14,7 @@ import type { ItemDoacao } from "./types/ItemDoacao";
 import type { Thread, Mensagem } from "./types/Mensagem";
 import ItemDetalhe from "./pages/ItemDetalhe";
 import MeuPerfil from "./pages/MeuPerfil";
+import { useFeedback } from "./components/Feedback";
 import {
   atualizarStatusItem,
   criarOuReutilizarThread,
@@ -38,6 +39,7 @@ type NovoItemInput = {
 
 export default function App() {
   const { usuario, sair } = useAuth();
+  const { mostrarFeedback } = useFeedback();
   const [itens, setItens] = useState<ItemDoacao[]>([]);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -74,6 +76,16 @@ export default function App() {
     void carregarThreads();
   }, [carregarThreads]);
 
+  useEffect(() => {
+    if (!usuario) return;
+
+    const intervalId = window.setInterval(() => {
+      void carregarThreads();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [usuario, carregarThreads]);
+
   const mensagensNaoLidas = usuario
     ? threads.reduce((total, thread) => total + (thread.naoLidas ?? 0), 0)
     : 0;
@@ -83,7 +95,7 @@ export default function App() {
 
   async function handleAdicionarItem(dados: NovoItemInput) {
     if (!usuario) {
-      alert("Voce precisa estar logado para cadastrar um item.");
+      mostrarFeedback("Voce precisa estar logado para cadastrar um item.", "erro");
       return;
     }
 
@@ -116,18 +128,24 @@ export default function App() {
 
   async function handleIniciarInteresse(itemId: number, mensagemTexto: string) {
     if (!usuario) {
-      alert("Voce precisa estar logado para manifestar interesse.");
+      mostrarFeedback(
+        "Voce precisa estar logado para manifestar interesse.",
+        "erro"
+      );
       return;
     }
 
     const item = itens.find((i) => i.id === itemId);
     if (!item) {
-      alert("Item invalido para interesse.");
+      mostrarFeedback("Item invalido para interesse.", "erro");
       return;
     }
 
     if (item.status === "doado") {
-      alert("Este item ja foi doado e nao aceita novos interesses.");
+      mostrarFeedback(
+        "Este item ja foi doado e nao aceita novos interesses.",
+        "erro"
+      );
       return;
     }
 
@@ -141,11 +159,15 @@ export default function App() {
 
       await Promise.all([carregarItens(), carregarThreads()]);
 
-      alert(
-        "Sua mensagem foi enviada ao doador. Ele podera visualizar pela Caixa de Entrada."
+      mostrarFeedback(
+        "Sua mensagem foi enviada ao doador. Ele podera visualizar pela Caixa de Entrada.",
+        "sucesso"
       );
     } catch (error: any) {
-      alert(error.message ?? "Nao foi possivel registrar o interesse.");
+      mostrarFeedback(
+        error.message ?? "Nao foi possivel registrar o interesse.",
+        "erro"
+      );
     }
   }
 
@@ -157,7 +179,10 @@ export default function App() {
       await atualizarStatusItem(itemId, novoStatus);
       await carregarItens();
     } catch (error: any) {
-      alert(error.message ?? "Nao foi possivel atualizar o status.");
+      mostrarFeedback(
+        error.message ?? "Nao foi possivel atualizar o status.",
+        "erro"
+      );
     }
   }
 
@@ -166,7 +191,7 @@ export default function App() {
       await removerItem(itemId);
       await carregarItens();
     } catch (error: any) {
-      alert(error.message ?? "Nao foi possivel remover o item.");
+      mostrarFeedback(error.message ?? "Nao foi possivel remover o item.", "erro");
     }
   }
 
@@ -183,7 +208,10 @@ export default function App() {
         ...mensagensApi,
       ]);
     } catch (error: any) {
-      alert(error.message ?? "Nao foi possivel carregar as mensagens.");
+      mostrarFeedback(
+        error.message ?? "Nao foi possivel carregar as mensagens.",
+        "erro"
+      );
     }
   }
 
@@ -200,7 +228,7 @@ export default function App() {
       await handleCarregarMensagensThread(threadId);
       await carregarThreads();
     } catch (error: any) {
-      alert(error.message ?? "Nao foi possivel enviar a mensagem.");
+      mostrarFeedback(error.message ?? "Nao foi possivel enviar a mensagem.", "erro");
     }
   }
 
@@ -213,7 +241,10 @@ export default function App() {
       await handleCarregarMensagensThread(threadId);
       await carregarThreads();
     } catch (error: any) {
-      alert(error.message ?? "Nao foi possivel marcar mensagens como lidas.");
+      mostrarFeedback(
+        error.message ?? "Nao foi possivel marcar mensagens como lidas.",
+        "erro"
+      );
     }
   }
 
@@ -349,6 +380,7 @@ export default function App() {
                     itens={itens}
                     onEnviarMensagem={handleEnviarMensagemNaThread}
                     onCarregarMensagens={handleCarregarMensagensThread}
+                    onAtualizarThreads={carregarThreads}
                     onMarcarMensagensComoLidas={handleMarcarMensagensComoLidas}
                   />
                 </PrivateRoute>

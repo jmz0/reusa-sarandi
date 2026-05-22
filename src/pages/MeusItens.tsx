@@ -26,9 +26,9 @@ function labelEstado(estado: ItemDoacao["estadoConservacao"]): string {
 function labelStatus(status: ItemDoacao["status"]): string {
   switch (status) {
     case "disponivel":
-      return "Disponível";
+      return "Disponivel";
     case "em-negociacao":
-      return "Em negociação";
+      return "Em negociacao";
     case "doado":
       return "Doado";
   }
@@ -37,10 +37,14 @@ function labelStatus(status: ItemDoacao["status"]): string {
 type ItemCardProps = {
   item: ItemDoacao;
   onAtualizarStatus: (id: number, novoStatus: ItemDoacao["status"]) => void;
-  onRemover: (id: number) => void;
+  onSolicitarRemocao: (item: ItemDoacao) => void;
 };
 
-function ItemCard({ item, onAtualizarStatus, onRemover }: ItemCardProps) {
+function ItemCard({
+  item,
+  onAtualizarStatus,
+  onSolicitarRemocao,
+}: ItemCardProps) {
   const [indiceImagem, setIndiceImagem] = useState(0);
 
   const imagens = item.imagens ?? [];
@@ -61,14 +65,6 @@ function ItemCard({ item, onAtualizarStatus, onRemover }: ItemCardProps) {
   function handleChangeStatus(e: ChangeEvent<HTMLSelectElement>) {
     const valor = e.target.value as ItemDoacao["status"];
     onAtualizarStatus(item.id, valor);
-  }
-
-  function handleRemoverClick() {
-    const ok = window.confirm(
-      "Tem certeza que deseja remover este item? Esta ação não pode ser desfeita."
-    );
-    if (!ok) return;
-    onRemover(item.id);
   }
 
   return (
@@ -92,14 +88,14 @@ function ItemCard({ item, onAtualizarStatus, onRemover }: ItemCardProps) {
                   onClick={irParaAnterior}
                   className="bg-white/80 hover:bg-white rounded-full px-2 py-1 text-xs"
                 >
-                  ◀
+                  &lt;
                 </button>
                 <button
                   type="button"
                   onClick={irParaProxima}
                   className="bg-white/80 hover:bg-white rounded-full px-2 py-1 text-xs"
                 >
-                  ▶
+                  &gt;
                 </button>
               </div>
               <span className="absolute bottom-1 right-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full">
@@ -113,7 +109,7 @@ function ItemCard({ item, onAtualizarStatus, onRemover }: ItemCardProps) {
       <header className="mb-2">
         <h2 className="text-lg font-semibold text-gray-900">{item.titulo}</h2>
         <p className="text-xs text-gray-500 mt-1">
-          Categoria: {item.categoria} • Bairro: {item.bairro}
+          Categoria: {item.categoria} - Bairro: {item.bairro}
         </p>
       </header>
 
@@ -135,8 +131,8 @@ function ItemCard({ item, onAtualizarStatus, onRemover }: ItemCardProps) {
             value={item.status}
             onChange={handleChangeStatus}
           >
-            <option value="disponivel">Disponível</option>
-            <option value="em-negociacao">Em negociação</option>
+            <option value="disponivel">Disponivel</option>
+            <option value="em-negociacao">Em negociacao</option>
             <option value="doado">Doado</option>
           </select>
         </div>
@@ -145,7 +141,7 @@ function ItemCard({ item, onAtualizarStatus, onRemover }: ItemCardProps) {
       <div className="mt-3 flex justify-end">
         <button
           type="button"
-          onClick={handleRemoverClick}
+          onClick={() => onSolicitarRemocao(item)}
           className="px-3 py-1.5 rounded border border-red-400 text-red-600 text-xs hover:bg-red-50"
         >
           Remover item
@@ -161,6 +157,9 @@ export default function MeusItens({
   onRemover,
 }: MeusItensProps) {
   const { usuario } = useAuth();
+  const [itemParaRemover, setItemParaRemover] = useState<ItemDoacao | null>(
+    null
+  );
 
   if (!usuario) {
     return (
@@ -172,14 +171,13 @@ export default function MeusItens({
           Meus itens cadastrados
         </h1>
         <p className="mt-3 text-gray-700">
-          É necessário estar autenticado para visualizar seus itens.
+          E necessario estar autenticado para visualizar seus itens.
         </p>
       </section>
     );
   }
 
   const usuarioId = usuario.id;
-
   const meusItens = itens.filter((item) => item.ownerId === usuarioId);
 
   return (
@@ -192,15 +190,15 @@ export default function MeusItens({
           Meus itens cadastrados
         </h1>
         <p className="mt-3 text-gray-700 max-w-2xl">
-          Nesta seção são exibidos os itens que você cadastrou na plataforma.
-          Você pode atualizar o status (Disponível, Em negociação, Doado) ou
-          remover o item quando ele não estiver mais disponível.
+          Nesta secao sao exibidos os itens que voce cadastrou na plataforma.
+          Voce pode atualizar o status (Disponivel, Em negociacao, Doado) ou
+          remover o item quando ele nao estiver mais disponivel.
         </p>
       </div>
 
       {meusItens.length === 0 ? (
         <p className="text-gray-600">
-          Você ainda não cadastrou nenhum item. Utilize a opção{" "}
+          Voce ainda nao cadastrou nenhum item. Utilize a opcao{" "}
           <strong>Cadastrar item</strong> para criar o primeiro registro.
         </p>
       ) : (
@@ -210,9 +208,42 @@ export default function MeusItens({
               key={item.id}
               item={item}
               onAtualizarStatus={onAtualizarStatus}
-              onRemover={onRemover}
+              onSolicitarRemocao={setItemParaRemover}
             />
           ))}
+        </div>
+      )}
+
+      {itemParaRemover && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-4 shadow-lg">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Remover item
+            </h2>
+            <p className="mt-2 text-sm text-gray-700">
+              Tem certeza que deseja remover este item? Esta acao nao pode ser
+              desfeita.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setItemParaRemover(null)}
+                className="px-3 py-1.5 rounded border text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onRemover(itemParaRemover.id);
+                  setItemParaRemover(null);
+                }}
+                className="px-3 py-1.5 rounded bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+              >
+                Remover
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

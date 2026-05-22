@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ItemDoacao } from "../types/ItemDoacao";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../components/Feedback";
 
 type ItensProps = {
   itens: ItemDoacao[];
@@ -40,6 +41,7 @@ type ItemCardProps = {
 function ItemCard({ item, onSolicitarInteresse }: ItemCardProps) {
   const [indiceImagem, setIndiceImagem] = useState(0);
   const { usuario } = useAuth();
+  const { mostrarFeedback } = useFeedback();
   const navigate = useNavigate();
 
   const imagens = item.imagens ?? [];
@@ -68,13 +70,19 @@ function ItemCard({ item, onSolicitarInteresse }: ItemCardProps) {
   function handleClickInteresse() {
     // 1) Se o item já foi doado, bloqueia
     if (item.status === "doado") {
-      alert("Este item já foi doado e não aceita novos interesses.");
+      mostrarFeedback(
+        "Este item já foi doado e não aceita novos interesses.",
+        "erro"
+      );
       return;
     }
 
     // 2) Se o usuário é o dono do item, bloqueia
     if (usuario && item.ownerId && item.ownerId === usuario.id) {
-      alert("Você é o doador deste item e não pode demonstrar interesse nele.");
+      mostrarFeedback(
+        "Você é o doador deste item e não pode demonstrar interesse nele.",
+        "erro"
+      );
       return;
     }
 
@@ -191,6 +199,7 @@ export default function Itens({
   itens,
   onIniciarInteresse,
 }: ItensProps) {
+  const { mostrarFeedback } = useFeedback();
   const [termoBusca, setTermoBusca] = useState("");
   const [categoriaSelecionada, setCategoriaSelecionada] = useState("");
   const [estadoSelecionado, setEstadoSelecionado] = useState("");
@@ -240,7 +249,10 @@ export default function Itens({
     if (!itemSelecionado) return;
     const texto = mensagemInteresse.trim();
     if (!texto) {
-      alert("Descreva rapidamente seu interesse antes de enviar.");
+      mostrarFeedback(
+        "Descreva rapidamente seu interesse antes de enviar.",
+        "erro"
+      );
       return;
     }
 

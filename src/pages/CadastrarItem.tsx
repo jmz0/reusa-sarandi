@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { FormEvent, ChangeEvent } from "react";
 import type { ItemDoacao } from "../types/ItemDoacao";
+import { useFeedback } from "../components/Feedback";
 
 type CadastrarItemProps = {
   onAdicionarItem: (dados: {
@@ -82,6 +83,7 @@ async function processarArquivoImagem(
 }
 
 export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
+  const { mostrarFeedback } = useFeedback();
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -101,10 +103,11 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
     for (const file of files) {
       const tamanhoMB = file.size / (1024 * 1024);
       if (tamanhoMB > MAX_FILE_MB) {
-        alert(
+        mostrarFeedback(
           `O arquivo "${file.name}" tem ${tamanhoMB.toFixed(
             2
-          )} MB. O limite e de ${MAX_FILE_MB} MB.`
+          )} MB. O limite e de ${MAX_FILE_MB} MB.`,
+          "erro"
         );
         continue;
       }
@@ -118,7 +121,10 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
           rotationDeg: 0,
         });
       } catch {
-        alert(`Nao foi possivel processar a imagem "${file.name}".`);
+        mostrarFeedback(
+          `Nao foi possivel processar a imagem "${file.name}".`,
+          "erro"
+        );
       }
     }
 
@@ -156,12 +162,12 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
       !bairro.trim() ||
       !categoria.trim()
     ) {
-      alert("Preencha todos os campos obrigatorios.");
+      mostrarFeedback("Preencha todos os campos obrigatorios.", "erro");
       return;
     }
 
     if (imagens.length === 0) {
-      alert("Envie pelo menos uma foto do item.");
+      mostrarFeedback("Envie pelo menos uma foto do item.", "erro");
       return;
     }
 
@@ -190,7 +196,10 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
 
       navigate("/itens");
     } catch (error: any) {
-      alert(error.message ?? "Nao foi possivel cadastrar o item.");
+      mostrarFeedback(
+        error.message ?? "Nao foi possivel cadastrar o item.",
+        "erro"
+      );
     } finally {
       setSalvando(false);
     }

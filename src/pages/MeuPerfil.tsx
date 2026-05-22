@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../components/Feedback";
 
 const fotosPerfilPorUsuario = new Map<number, string>();
 
 export default function MeuPerfil() {
   const { usuario } = useAuth();
+  const { mostrarFeedback } = useFeedback();
   const [foto, setFoto] = useState<string | null>(
     usuario ? fotosPerfilPorUsuario.get(usuario.id) ?? null : null
   );
@@ -30,10 +32,11 @@ export default function MeuPerfil() {
 
     const tamanhoMB = file.size / (1024 * 1024);
     if (tamanhoMB > 3) {
-      alert(
+      mostrarFeedback(
         `O arquivo selecionado tem ${tamanhoMB.toFixed(
           2
-        )} MB. O limite e de 3 MB.`
+        )} MB. O limite e de 3 MB.`,
+        "erro"
       );
       return;
     }
@@ -45,7 +48,7 @@ export default function MeuPerfil() {
       fotosPerfilPorUsuario.set(usuarioId, dataUrl);
     };
     reader.onerror = () => {
-      alert("Nao foi possivel ler a imagem selecionada.");
+      mostrarFeedback("Nao foi possivel ler a imagem selecionada.", "erro");
     };
     reader.readAsDataURL(file);
 
@@ -53,11 +56,9 @@ export default function MeuPerfil() {
   }
 
   function handleRemoverFoto() {
-    const ok = window.confirm("Deseja remover a sua foto de perfil?");
-    if (!ok) return;
-
     setFoto(null);
     fotosPerfilPorUsuario.delete(usuarioId);
+    mostrarFeedback("Foto de perfil removida.", "sucesso");
   }
 
   return (

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import type { ItemDoacao } from "../types/ItemDoacao";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../components/Feedback";
 
 type ItemDetalheProps = {
   itens: ItemDoacao[];
@@ -15,6 +16,7 @@ export default function ItemDetalhe({
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { usuario } = useAuth();
+  const { mostrarFeedback } = useFeedback();
 
   const itemId = Number(id);
   const item = itens.find((i) => i.id === itemId) || null;
@@ -52,12 +54,18 @@ export default function ItemDetalhe({
 
   async function handleEnviarInteresse() {
     if (isDoado) {
-      alert("Este item já foi doado e não aceita novos interesses.");
+      mostrarFeedback(
+        "Este item já foi doado e não aceita novos interesses.",
+        "erro"
+      );
       return;
     }
 
     if (isDoador) {
-      alert("Você é o doador deste item e não pode demonstrar interesse nele.");
+      mostrarFeedback(
+        "Você é o doador deste item e não pode demonstrar interesse nele.",
+        "erro"
+      );
       return;
     }
 
@@ -68,7 +76,7 @@ export default function ItemDetalhe({
 
     const texto = mensagem.trim();
     if (!texto) {
-      alert("Descreva seu interesse antes de enviar.");
+      mostrarFeedback("Descreva seu interesse antes de enviar.", "erro");
       return;
     }
 
