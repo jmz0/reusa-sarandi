@@ -39,7 +39,8 @@ backend/
 
 - `database/schema.sql`: define as tabelas, chaves primarias, chaves estrangeiras, constraints, checks, defaults e indices.
 - `database/seed.sql`: insere dados iniciais para facilitar testes locais.
-- `database/queries.sql`: registra consultas SQL principais como referencia de modelagem e manutencao.
+- `database/queries.sql`: documenta as consultas SQL equivalentes as rotas reais da API, usando os nomes reais das tabelas e colunas.
+- `database/crud-demo.sql`: apoio opcional para demonstracao SQL transacional com `ROLLBACK`. A manipulacao principal da aplicacao acontece pelas rotas da API.
 
 O banco local gerado pelo projeto fica em:
 
@@ -61,6 +62,39 @@ npm run init-db
 ```
 
 Esse comando aplica `schema.sql` e `seed.sql`. Como o schema derruba e recria as tabelas, use esse comando com cuidado quando houver dados de teste que voce queira preservar.
+
+## Executar demonstracao SQL complementar
+
+Depois de inicializar o banco, execute:
+
+```bash
+npm run crud-demo
+```
+
+Esse script executa `database/crud-demo.sql` contra o SQLite local. Ele e complementar: o CRUD funcional da aplicacao ocorre pelas rotas HTTP conectadas ao SQLite.
+
+O arquivo complementar:
+
+- insere usuarios de teste;
+- consulta os usuarios;
+- insere item de doacao;
+- consulta item com dados do doador;
+- atualiza status do item;
+- insere imagem vinculada ao item;
+- cria thread entre doador e interessado;
+- insere mensagem;
+- consulta mensagens;
+- marca mensagem como lida;
+- remove mensagem, thread, imagem, item, perfis e usuarios de teste;
+- executa `ROLLBACK` ao final para nao alterar permanentemente o banco.
+
+No PowerShell:
+
+```powershell
+cd backend
+npm run init-db
+npm run crud-demo
+```
 
 ## Rodar o servidor
 
@@ -121,6 +155,8 @@ Os arquivos ficam disponiveis publicamente pelo backend em:
 - `DELETE /api/itens/:id`
 - `POST /api/itens/:id/imagens`
 - `GET /api/itens/:id/imagens`
+- `DELETE /api/imagens/:id`
+- `DELETE /api/itens/:id/imagens/:imagemId`
 
 ### Threads e mensagens
 
@@ -129,6 +165,39 @@ Os arquivos ficam disponiveis publicamente pelo backend em:
 - `GET /api/mensagens/thread/:threadId?usuarioId=`
 - `POST /api/mensagens`
 - `PATCH /api/mensagens/thread/:threadId/lidas`
+- `DELETE /api/mensagens/:id`
+
+## Endpoints por operacao CRUD
+
+INSERT:
+
+- `POST /api/auth/cadastro`
+- `POST /api/itens`
+- `POST /api/itens/:id/imagens`
+- `POST /api/threads`
+- `POST /api/mensagens`
+
+SELECT:
+
+- `POST /api/auth/login`
+- `GET /api/usuarios/:id`
+- `GET /api/itens`
+- `GET /api/itens/:id`
+- `GET /api/itens/:id/imagens`
+- `GET /api/threads/usuario/:usuarioId`
+- `GET /api/mensagens/thread/:threadId?usuarioId=`
+
+UPDATE:
+
+- `PATCH /api/itens/:id/status`
+- `PATCH /api/mensagens/thread/:threadId/lidas`
+
+DELETE:
+
+- `DELETE /api/itens/:id`
+- `DELETE /api/imagens/:id`
+- `DELETE /api/itens/:id/imagens/:imagemId`
+- `DELETE /api/mensagens/:id`
 
 ## Exemplos de requisicoes
 
@@ -190,6 +259,18 @@ curl -X POST http://localhost:3001/api/itens/1/imagens \
   -F "rotationDeg=0"
 ```
 
+### Remover imagem de item
+
+```bash
+curl -X DELETE http://localhost:3001/api/imagens/1
+```
+
+Tambem existe a forma vinculada ao item:
+
+```bash
+curl -X DELETE http://localhost:3001/api/itens/1/imagens/1
+```
+
 ### Criar ou reutilizar thread
 
 ```bash
@@ -226,6 +307,24 @@ O backend verifica se o usuario informado participa da thread.
 curl -X PATCH http://localhost:3001/api/mensagens/thread/1/lidas \
   -H "Content-Type: application/json" \
   -d "{\"usuarioId\":1}"
+```
+
+### Remover mensagem
+
+```bash
+curl -X DELETE "http://localhost:3001/api/mensagens/1?usuarioId=1"
+```
+
+## Testes rapidos com PowerShell
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/auth/cadastro -ContentType "application/json" -Body '{"nome":"Teste API","email":"teste.api@reusa.local","senha":"1234"}'
+Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/auth/login -ContentType "application/json" -Body '{"email":"ana@reusa.local","senha":"1234"}'
+Invoke-RestMethod http://localhost:3001/api/itens
+Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/itens -ContentType "application/json" -Body '{"doadorId":1,"titulo":"Item API","descricao":"Item criado por teste de API.","categoria":"moveis","estadoConservacao":"bom","localizacao":"Centro"}'
+Invoke-RestMethod -Method Patch -Uri http://localhost:3001/api/itens/1/status -ContentType "application/json" -Body '{"status":"reservado"}'
+Invoke-RestMethod http://localhost:3001/api/threads/usuario/1
+Invoke-RestMethod "http://localhost:3001/api/mensagens/thread/1?usuarioId=1"
 ```
 
 ## Observacoes importantes

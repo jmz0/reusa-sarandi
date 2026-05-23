@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "init-db": "node src/db.js"
+    "init-db": "node src/db.js",
+    "crud-demo": "node src/run-sql.js database/crud-demo.sql"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -248,4 +248,35 @@ router.patch("/mensagens/thread/:threadId/lidas", async (req, res, next) => {
   }
 });
 
+router.delete("/mensagens/:id", async (req, res, next) => {
+  try {
+    const id = toId(req.params.id);
+    const usuarioId = toId((req.body && req.body.usuarioId) || req.query.usuarioId);
+
+    if (!id || !usuarioId) {
+      return res.status(400).json({ erro: "id da mensagem e usuarioId sao obrigatorios." });
+    }
+
+    const db = await getDb();
+    const mensagem = await db.get(
+      `SELECT m.id, m.thread_id
+       FROM mensagens m
+       JOIN threads t ON t.id = m.thread_id
+       WHERE m.id = ?
+         AND (t.doador_id = ? OR t.interessado_id = ?)`,
+      [id, usuarioId, usuarioId]
+    );
+
+    if (!mensagem) {
+      return res.status(404).json({ erro: "Mensagem nao encontrada para este usuario." });
+    }
+
+    await db.run("DELETE FROM mensagens WHERE id = ?", [id]);
+
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+});
+
 module.exports = router;

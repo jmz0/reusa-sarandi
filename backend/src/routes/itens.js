@@ -269,11 +269,33 @@ router.delete("/itens/:id", async (req, res, next) => {
     }
 
     const db = await getDb();
-    const imagens = await getImagens(db, id);
-    const result = await db.run("DELETE FROM itens_doacao WHERE id = ?", [id]);
+    const item = await itemExiste(db, id);
 
-    if (result.changes === 0) {
+    if (!item) {
       return res.status(404).json({ erro: "Item nao encontrado." });
+    }
+
+    const imagens = await getImagens(db, id);
+
+    await db.exec("BEGIN");
+    try {
+      await db.run(
+        `DELETE FROM mensagens
+         WHERE thread_id IN (
+           SELECT id
+           FROM threads
+           WHERE item_id = ?
+         )`,
+        [id]
+      );
+
+      await db.run("DELETE FROM threads WHERE item_id = ?", [id]);
+      await db.run("DELETE FROM imagens_item WHERE item_id = ?", [id]);
+      await db.run("DELETE FROM itens_doacao WHERE id = ?", [id]);
+      await db.exec("COMMIT");
+    } catch (error) {
+      await db.exec("ROLLBACK");
+      throw error;
     }
 
     await Promise.all(
@@ -281,6 +303,35 @@ router.delete("/itens/:id", async (req, res, next) => {
         fs.unlink(path.join(uploadsDir, path.basename(imagem.nomeArquivo))).catch(() => undefined)
       )
     );
+
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete("/imagens/:id", async (req, res, next) => {
+  try {
+    const id = toId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ erro: "ID de imagem invalido." });
+    }
+
+    const db = await getDb();
+    const imagem = await db.get(
+      `SELECT id, item_id, nome_arquivo
+       FROM imagens_item
+       WHERE id = ?`,
+      [id]
+    );
+
+    if (!imagem) {
+      return res.status(404).json({ erro: "Imagem nao encontrada." });
+    }
+
+    await db.run("DELETE FROM imagens_item WHERE id = ?", [id]);
+    await fs.unlink(path.join(uploadsDir, path.basename(imagem.nome_arquivo))).catch(() => undefined);
 
     return res.status(204).send();
   } catch (error) {
@@ -371,6 +422,36 @@ router.get("/itens/:id/imagens", async (req, res, next) => {
     }
 
     return res.json({ imagens: await getImagens(db, id) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete("/itens/:id/imagens/:imagemId", async (req, res, next) => {
+  try {
+    const id = toId(req.params.id);
+    const imagemId = toId(req.params.imagemId);
+
+    if (!id || !imagemId) {
+      return res.status(400).json({ erro: "ID de item ou imagem invalido." });
+    }
+
+    const db = await getDb();
+    const imagem = await db.get(
+      `SELECT id, item_id, nome_arquivo
+       FROM imagens_item
+       WHERE id = ? AND item_id = ?`,
+      [imagemId, id]
+    );
+
+    if (!imagem) {
+      return res.status(404).json({ erro: "Imagem nao encontrada." });
+    }
+
+    await db.run("DELETE FROM imagens_item WHERE id = ?", [imagemId]);
+    await fs.unlink(path.join(uploadsDir, path.basename(imagem.nome_arquivo))).catch(() => undefined);
+
+    return res.status(204).send();
   } catch (error) {
     return next(error);
   }
