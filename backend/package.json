@@ -1,0 +1,21 @@
+{
+  "name": "reusa-sarandi-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend inicial do Modulo 3 do projeto Reusa Sarandi.",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "init-db": "node src/db.js",
+    "crud-demo": "node src/run-sql.js database/crud-demo.sql"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  }
+}

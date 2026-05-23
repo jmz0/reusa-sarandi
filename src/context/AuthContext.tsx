@@ -1,6 +1,11 @@
 // src/context/AuthContext.tsx
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import {
+  buscarUsuarioPorId,
+  cadastrarUsuario,
+  loginUsuario,
+} from "../services/api";
 
 export type Usuario = {
   id: number;
@@ -8,22 +13,16 @@ export type Usuario = {
   email: string;
 };
 
-type UsuarioPersistido = Usuario & {
-  senha: string;
-  criadoEm: string;
-};
-
 type AuthContextType = {
   usuario: Usuario | null;
-  cadastrar: (nome: string, email: string, senha: string) => void;
-  entrar: (email: string, senha: string) => void;
+  cadastrar: (nome: string, email: string, senha: string) => Promise<void>;
+  entrar: (email: string, senha: string) => Promise<void>;
   sair: () => void;
   obterUsuarioPorId: (id: number) => Usuario | null;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const USERS_KEY = "reusa_sarandi_usuarios";
 const USER_LOGADO_KEY = "reusa_sarandi_usuario_atual";
 
 type AuthProviderProps = {
@@ -32,93 +31,43 @@ type AuthProviderProps = {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [usuariosCache, setUsuariosCache] = useState<Record<number, Usuario>>(
+    {}
+  );
 
-  // Carrega usuário logado no início
   useEffect(() => {
     try {
       const salvo = window.localStorage.getItem(USER_LOGADO_KEY);
       if (!salvo) return;
+
       const parsed = JSON.parse(salvo) as Usuario;
       setUsuario(parsed);
+      setUsuariosCache((atual) => ({ ...atual, [parsed.id]: parsed }));
     } catch {
-      // em app real, logar erro
+      window.localStorage.removeItem(USER_LOGADO_KEY);
     }
   }, []);
 
-  function lerUsuarios(): UsuarioPersistido[] {
-    try {
-      const salvo = window.localStorage.getItem(USERS_KEY);
-      if (!salvo) return [];
-      const parsed = JSON.parse(salvo);
-      if (!Array.isArray(parsed)) return [];
-      return parsed as UsuarioPersistido[];
-    } catch {
-      return [];
-    }
-  }
-
-  function salvarUsuarios(lista: UsuarioPersistido[]) {
-    window.localStorage.setItem(USERS_KEY, JSON.stringify(lista));
-  }
-
-  function cadastrar(nome: string, email: string, senha: string) {
-    const usuarios = lerUsuarios();
-
-    const jaExiste = usuarios.some(
-      (u) => u.email.toLowerCase() === email.toLowerCase()
-    );
-    if (jaExiste) {
-      throw new Error("Já existe um usuário cadastrado com este e-mail.");
-    }
-
-    const novoId =
-      usuarios.length > 0 ? Math.max(...usuarios.map((u) => u.id)) + 1 : 1;
-
-    const novo: UsuarioPersistido = {
-      id: novoId,
-      nome,
-      email,
-      senha,
-      criadoEm: new Date().toISOString(),
-    };
-
-    const atualizada = [...usuarios, novo];
-    salvarUsuarios(atualizada);
-
-    const usuarioVisivel: Usuario = {
-      id: novo.id,
-      nome: novo.nome,
-      email: novo.email,
-    };
-
+  function salvarUsuarioAtual(usuarioAtual: Usuario) {
     window.localStorage.setItem(
       USER_LOGADO_KEY,
-      JSON.stringify(usuarioVisivel)
+      JSON.stringify(usuarioAtual)
     );
-    setUsuario(usuarioVisivel);
+    setUsuario(usuarioAtual);
+    setUsuariosCache((atual) => ({
+      ...atual,
+      [usuarioAtual.id]: usuarioAtual,
+    }));
   }
 
-  function entrar(email: string, senha: string) {
-    const usuarios = lerUsuarios();
-    const encontrado = usuarios.find(
-      (u) =>
-        u.email.toLowerCase() === email.toLowerCase() && u.senha === senha
-    );
+  async function cadastrar(nome: string, email: string, senha: string) {
+    const usuarioCriado = await cadastrarUsuario(nome, email, senha);
+    salvarUsuarioAtual(usuarioCriado);
+  }
 
-    if (!encontrado) {
-      throw new Error("E-mail ou senha inválidos.");
-    }
-
-    const usuarioVisivel: Usuario = {
-      id: encontrado.id,
-      nome: encontrado.nome,
-      email: encontrado.email,
-    };
-    window.localStorage.setItem(
-      USER_LOGADO_KEY,
-      JSON.stringify(usuarioVisivel)
-    );
-    setUsuario(usuarioVisivel);
+  async function entrar(email: string, senha: string) {
+    const usuarioAutenticado = await loginUsuario(email, senha);
+    salvarUsuarioAtual(usuarioAutenticado);
   }
 
   function sair() {
@@ -127,22 +76,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   function obterUsuarioPorId(id: number): Usuario | null {
-  // Usuário "sistema" para itens iniciais (mock)
-    if (id === 0) {
-    return {
-      id: 0,
-      nome: "Doador da plataforma",
-      email: "doacoes@reusasarandi.local",
-    };
+    if (usuariosCache[id]) {
+      return usuariosCache[id];
     }
-    const usuarios = lerUsuarios();
-    const encontrado = usuarios.find((u) => u.id === id);
-    if (!encontrado) return null;
-    return {
-      id: encontrado.id,
-      nome: encontrado.nome,
-      email: encontrado.email,
-    };
+
+    void buscarUsuarioPorId(id).then((encontrado) => {
+      if (!encontrado) return;
+      setUsuariosCache((atual) => ({
+        ...atual,
+        [encontrado.id]: encontrado,
+      }));
+    });
+
+    return null;
   }
 
   const value: AuthContextType = {

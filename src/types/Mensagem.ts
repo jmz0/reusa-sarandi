@@ -10,6 +10,10 @@ export type Thread = {
   createdAt: string;
   lastUpdatedAt: string;
   status: ThreadStatus;
+  itemTitulo?: string;
+  donorNome?: string;
+  receiverNome?: string;
+  naoLidas?: number;
 };
 
 export type Mensagem = {

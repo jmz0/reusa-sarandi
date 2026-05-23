@@ -1,0 +1,6 @@
+database/*.sqlite
+database/*.sqlite-*
+uploads/*
+!uploads/.gitkeep
+node_modules/
+*.log

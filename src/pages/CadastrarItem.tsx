@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { FormEvent, ChangeEvent } from "react";
 import type { ItemDoacao } from "../types/ItemDoacao";
+import { useFeedback } from "../components/Feedback";
 
 type CadastrarItemProps = {
   onAdicionarItem: (dados: {
@@ -10,22 +11,23 @@ type CadastrarItemProps = {
     categoria: string;
     bairro: string;
     estadoConservacao: ItemDoacao["estadoConservacao"];
-    imagens: { url: string; rotationDeg?: number }[];
-  }) => void;
+    imagens: { file?: File; url: string; rotationDeg?: number }[];
+  }) => void | Promise<void>;
 };
 
 type ImagemLocal = {
   id: number;
+  file: File;
   url: string;
   rotationDeg: number;
 };
 
 const MAX_FILE_MB = 3;
-// resolução máxima (largura/altura)
 const MAX_DIM = 1280;
 
-// Função auxiliar para comprimir / limitar resolução
-async function processarArquivoImagem(file: File): Promise<string> {
+async function processarArquivoImagem(
+  file: File
+): Promise<{ file: File; url: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -35,24 +37,41 @@ async function processarArquivoImagem(file: File): Promise<string> {
         const canvas = document.createElement("canvas");
         let { width, height } = img;
 
-        // calcula escala
         const escala = Math.min(MAX_DIM / width, MAX_DIM / height, 1);
-        const novoLarg = width * escala;
-        const novoAlt = height * escala;
+        width *= escala;
+        height *= escala;
 
-        canvas.width = novoLarg;
-        canvas.height = novoAlt;
+        canvas.width = width;
+        canvas.height = height;
 
         const ctx = canvas.getContext("2d");
         if (!ctx) {
-          reject(new Error("Canvas não disponível"));
+          reject(new Error("Canvas nao disponivel"));
           return;
         }
 
-        ctx.drawImage(img, 0, 0, novoLarg, novoAlt);
+        ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8); // compressão
-        resolve(dataUrl);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("Nao foi possivel gerar a imagem"));
+              return;
+            }
+
+            const nomeBase = file.name.replace(/\.[^.]+$/, "");
+            const imagemProcessada = new File([blob], `${nomeBase}.jpg`, {
+              type: "image/jpeg",
+            });
+
+            resolve({
+              file: imagemProcessada,
+              url: URL.createObjectURL(imagemProcessada),
+            });
+          },
+          "image/jpeg",
+          0.8
+        );
       };
       img.onerror = () => reject(new Error("Erro ao carregar imagem"));
       img.src = e.target?.result as string;
@@ -64,14 +83,15 @@ async function processarArquivoImagem(file: File): Promise<string> {
 }
 
 export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
+  const { mostrarFeedback } = useFeedback();
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
   const [categoria, setCategoria] = useState("");
   const [bairro, setBairro] = useState("");
   const [estadoConservacao, setEstadoConservacao] =
     useState<ItemDoacao["estadoConservacao"]>("bom");
-
   const [imagens, setImagens] = useState<ImagemLocal[]>([]);
+  const [salvando, setSalvando] = useState(false);
   const navigate = useNavigate();
 
   async function handleImagensChange(event: ChangeEvent<HTMLInputElement>) {
@@ -83,23 +103,28 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
     for (const file of files) {
       const tamanhoMB = file.size / (1024 * 1024);
       if (tamanhoMB > MAX_FILE_MB) {
-        alert(
+        mostrarFeedback(
           `O arquivo "${file.name}" tem ${tamanhoMB.toFixed(
             2
-          )} MB. O limite é de ${MAX_FILE_MB} MB.`
+          )} MB. O limite e de ${MAX_FILE_MB} MB.`,
+          "erro"
         );
         continue;
       }
 
       try {
-        const urlProcessada = await processarArquivoImagem(file);
+        const imagem = await processarArquivoImagem(file);
         novasImagens.push({
           id: Date.now() + Math.random(),
-          url: urlProcessada,
+          file: imagem.file,
+          url: imagem.url,
           rotationDeg: 0,
         });
       } catch {
-        alert(`Não foi possível processar a imagem "${file.name}".`);
+        mostrarFeedback(
+          `Nao foi possivel processar a imagem "${file.name}".`,
+          "erro"
+        );
       }
     }
 
@@ -107,7 +132,6 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
       setImagens((atual) => [...atual, ...novasImagens]);
     }
 
-    // limpa seleção do input (permite selecionar o mesmo arquivo depois)
     event.target.value = "";
   }
 
@@ -122,10 +146,14 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
   }
 
   function removerImagem(id: number) {
-    setImagens((atual) => atual.filter((img) => img.id !== id));
+    setImagens((atual) => {
+      const removida = atual.find((img) => img.id === id);
+      if (removida) URL.revokeObjectURL(removida.url);
+      return atual.filter((img) => img.id !== id);
+    });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (
@@ -134,36 +162,47 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
       !bairro.trim() ||
       !categoria.trim()
     ) {
-      alert("Preencha todos os campos obrigatórios.");
+      mostrarFeedback("Preencha todos os campos obrigatorios.", "erro");
       return;
     }
 
     if (imagens.length === 0) {
-      alert("Envie pelo menos uma foto do item.");
+      mostrarFeedback("Envie pelo menos uma foto do item.", "erro");
       return;
     }
 
-    onAdicionarItem({
-      titulo: titulo.trim(),
-      descricao: descricao.trim(),
-      categoria,
-      bairro: bairro.trim(),
-      estadoConservacao,
-      imagens: imagens.map((img) => ({
-        url: img.url,
-        rotationDeg: img.rotationDeg || 0,
-      })),
-    });
+    try {
+      setSalvando(true);
+      await onAdicionarItem({
+        titulo: titulo.trim(),
+        descricao: descricao.trim(),
+        categoria,
+        bairro: bairro.trim(),
+        estadoConservacao,
+        imagens: imagens.map((img) => ({
+          file: img.file,
+          url: img.url,
+          rotationDeg: img.rotationDeg || 0,
+        })),
+      });
 
-    // limpar
-    setTitulo("");
-    setDescricao("");
-    setCategoria("");
-    setBairro("");
-    setEstadoConservacao("bom");
-    setImagens([]);
+      imagens.forEach((img) => URL.revokeObjectURL(img.url));
+      setTitulo("");
+      setDescricao("");
+      setCategoria("");
+      setBairro("");
+      setEstadoConservacao("bom");
+      setImagens([]);
 
-    navigate("/itens");
+      navigate("/itens");
+    } catch (error: any) {
+      mostrarFeedback(
+        error.message ?? "Nao foi possivel cadastrar o item.",
+        "erro"
+      );
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -172,12 +211,12 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
         id="cad-titulo"
         className="text-2xl sm:text-3xl font-bold text-gray-900"
       >
-        Cadastrar item para doação
+        Cadastrar item para doacao
       </h1>
 
       <p className="mt-3 text-gray-700">
-        Preencha as informações do item. Pelo menos uma foto é obrigatória para
-        facilitar a avaliação visual por quem irá receber a doação.
+        Preencha as informacoes do item. Pelo menos uma foto e obrigatoria para
+        facilitar a avaliacao visual por quem ira receber a doacao.
       </p>
 
       <form
@@ -185,9 +224,8 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
         aria-describedby="cad-descricao"
         onSubmit={handleSubmit}
       >
-        {/* Título */}
         <label className="grid gap-1">
-          <span className="font-medium text-sm text-gray-800">Título*</span>
+          <span className="font-medium text-sm text-gray-800">Titulo*</span>
           <input
             type="text"
             className="border rounded px-3 py-2 text-sm"
@@ -198,7 +236,6 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
           />
         </label>
 
-        {/* Categoria */}
         <label className="grid gap-1">
           <span className="font-medium text-sm text-gray-800">Categoria*</span>
           <select
@@ -208,21 +245,20 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
             required
           >
             <option value="">Selecione uma categoria</option>
-            <option value="Móveis">Móveis</option>
+            <option value="Moveis">Moveis</option>
             <option value="Roupas">Roupas</option>
-            <option value="Eletrodomésticos">Eletrodomésticos</option>
+            <option value="Eletrodomesticos">Eletrodomesticos</option>
             <option value="Infantil">Infantil</option>
-            <option value="Eletrônicos">Eletrônicos</option>
-            <option value="Utensílios domésticos">Utensílios domésticos</option>
+            <option value="Eletronicos">Eletronicos</option>
+            <option value="Utensilios domesticos">Utensilios domesticos</option>
             <option value="Esportes e lazer">Esportes e lazer</option>
             <option value="Outros">Outros</option>
           </select>
         </label>
 
-        {/* Estado de conservação */}
         <label className="grid gap-1">
           <span className="font-medium text-sm text-gray-800">
-            Estado de conservação*
+            Estado de conservacao*
           </span>
           <select
             className="border rounded px-3 py-2 text-sm"
@@ -241,36 +277,33 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
           </select>
         </label>
 
-        {/* Descrição */}
         <label className="grid gap-1">
-          <span className="font-medium text-sm text-gray-800">Descrição*</span>
+          <span className="font-medium text-sm text-gray-800">Descricao*</span>
           <textarea
             className="border rounded px-3 py-2 text-sm"
             rows={4}
-            placeholder="Descreva o estado, dimensões, reparos necessários, etc."
+            placeholder="Descreva o estado, dimensoes, reparos necessarios, etc."
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
             required
           />
         </label>
 
-        {/* Bairro */}
         <label className="grid gap-1">
           <span className="font-medium text-sm text-gray-800">Bairro*</span>
           <input
             type="text"
             className="border rounded px-3 py-2 text-sm"
-            placeholder="Ex.: Jardim São José"
+            placeholder="Ex.: Jardim Sao Jose"
             value={bairro}
             onChange={(e) => setBairro(e.target.value)}
             required
           />
         </label>
 
-        {/* Upload múltiplo de imagens */}
         <label className="grid gap-1">
           <span className="font-medium text-sm text-gray-800">
-            Fotos do item* (até {MAX_FILE_MB} MB cada)
+            Fotos do item* (ate {MAX_FILE_MB} MB cada)
           </span>
           <input
             type="file"
@@ -280,11 +313,10 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
             className="text-sm"
           />
           <span className="text-xs text-gray-500">
-            As imagens serão automaticamente redimensionadas para até {MAX_DIM}px.
+            As imagens serao automaticamente redimensionadas para ate {MAX_DIM}px.
           </span>
         </label>
 
-        {/* Galeria de pré-visualização, com rotação/remoção */}
         {imagens.length > 0 && (
           <div className="grid grid-cols-2 gap-3">
             {imagens.map((img) => (
@@ -295,7 +327,7 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
                 <div className="w-full h-32 overflow-hidden flex items-center justify-center">
                   <img
                     src={img.url}
-                    alt="Pré-visualização"
+                    alt="Pre-visualizacao"
                     style={{ transform: `rotate(${img.rotationDeg}deg)` }}
                     className="object-cover w-full h-full rounded"
                   />
@@ -306,14 +338,14 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
                     onClick={() => rotacionarImagem(img.id, -90)}
                     className="px-2 py-1 border rounded hover:bg-gray-100"
                   >
-                    ↺ Girar -90°
+                    Girar -90
                   </button>
                   <button
                     type="button"
                     onClick={() => rotacionarImagem(img.id, 90)}
                     className="px-2 py-1 border rounded hover:bg-gray-100"
                   >
-                    ↻ Girar +90°
+                    Girar +90
                   </button>
                   <button
                     type="button"
@@ -328,17 +360,17 @@ export default function CadastrarItem({ onAdicionarItem }: CadastrarItemProps) {
           </div>
         )}
 
-        {/* Botão */}
         <button
           type="submit"
-          className="mt-2 inline-flex items-center justify-center px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          disabled={salvando}
+          className="mt-2 inline-flex items-center justify-center px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400"
         >
-          Salvar cadastro
+          {salvando ? "Salvando..." : "Salvar cadastro"}
         </button>
 
         <p id="cad-descricao" className="text-xs text-gray-500">
-          Os campos marcados com * são obrigatórios. As fotos são processadas somente
-          no navegador e armazenadas localmente nesta versão protótipo.
+          Os campos marcados com * sao obrigatorios. As fotos sao enviadas ao
+          backend e salvas localmente em backend/uploads.
         </p>
       </form>
     </section>

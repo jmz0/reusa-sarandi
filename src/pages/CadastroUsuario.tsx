@@ -12,15 +12,15 @@ export default function CadastroUsuario() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErro(null);
 
     try {
-      cadastrar(nome, email, senha);
+      await cadastrar(nome, email, senha);
       navigate("/meus-itens");
     } catch (err: any) {
-      setErro(err.message ?? "Não foi possível realizar o cadastro.");
+      setErro(err.message ?? "Nao foi possivel realizar o cadastro.");
     }
   }
 
@@ -80,7 +80,7 @@ export default function CadastroUsuario() {
         </button>
 
         <p className="text-xs text-gray-600">
-          Já possui cadastro?{" "}
+          Ja possui cadastro?{" "}
           <Link to="/login" className="text-blue-700 hover:underline">
             Fazer login
           </Link>

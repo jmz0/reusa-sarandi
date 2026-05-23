@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ItemDoacao } from "../types/ItemDoacao";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../components/Feedback";
 
 type ItensProps = {
   itens: ItemDoacao[];
-  onIniciarInteresse: (itemId: number, mensagem: string) => void;
+  onIniciarInteresse: (itemId: number, mensagem: string) => void | Promise<void>;
 };
 
 function labelEstado(estado: ItemDoacao["estadoConservacao"]): string {
@@ -40,6 +41,7 @@ type ItemCardProps = {
 function ItemCard({ item, onSolicitarInteresse }: ItemCardProps) {
   const [indiceImagem, setIndiceImagem] = useState(0);
   const { usuario } = useAuth();
+  const { mostrarFeedback } = useFeedback();
   const navigate = useNavigate();
 
   const imagens = item.imagens ?? [];
@@ -68,13 +70,19 @@ function ItemCard({ item, onSolicitarInteresse }: ItemCardProps) {
   function handleClickInteresse() {
     // 1) Se o item já foi doado, bloqueia
     if (item.status === "doado") {
-      alert("Este item já foi doado e não aceita novos interesses.");
+      mostrarFeedback(
+        "Este item já foi doado e não aceita novos interesses.",
+        "erro"
+      );
       return;
     }
 
     // 2) Se o usuário é o dono do item, bloqueia
     if (usuario && item.ownerId && item.ownerId === usuario.id) {
-      alert("Você é o doador deste item e não pode demonstrar interesse nele.");
+      mostrarFeedback(
+        "Você é o doador deste item e não pode demonstrar interesse nele.",
+        "erro"
+      );
       return;
     }
 
@@ -191,6 +199,7 @@ export default function Itens({
   itens,
   onIniciarInteresse,
 }: ItensProps) {
+  const { mostrarFeedback } = useFeedback();
   const [termoBusca, setTermoBusca] = useState("");
   const [categoriaSelecionada, setCategoriaSelecionada] = useState("");
   const [estadoSelecionado, setEstadoSelecionado] = useState("");
@@ -198,6 +207,13 @@ export default function Itens({
     null
   );
   const [mensagemInteresse, setMensagemInteresse] = useState("");
+  const categoriasDisponiveis = Array.from(
+    new Set(
+      itens
+        .map((item) => item.categoria)
+        .filter((categoria) => categoria.trim().length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b));
 
   const termo = termoBusca.trim().toLowerCase();
 
@@ -229,15 +245,18 @@ export default function Itens({
     setMensagemInteresse("");
   }
 
-  function confirmarInteresse() {
+  async function confirmarInteresse() {
     if (!itemSelecionado) return;
     const texto = mensagemInteresse.trim();
     if (!texto) {
-      alert("Descreva rapidamente seu interesse antes de enviar.");
+      mostrarFeedback(
+        "Descreva rapidamente seu interesse antes de enviar.",
+        "erro"
+      );
       return;
     }
 
-    onIniciarInteresse(itemSelecionado.id, texto);
+    await onIniciarInteresse(itemSelecionado.id, texto);
     fecharModal();
   }
 
@@ -271,14 +290,11 @@ export default function Itens({
           onChange={(e) => setCategoriaSelecionada(e.target.value)}
         >
           <option value="">Todas as categorias</option>
-          <option value="Móveis">Móveis</option>
-          <option value="Roupas">Roupas</option>
-          <option value="Eletrodomésticos">Eletrodomésticos</option>
-          <option value="Infantil">Infantil</option>
-          <option value="Eletrônicos">Eletrônicos</option>
-          <option value="Utensílios domésticos">Utensílios domésticos</option>
-          <option value="Esportes e lazer">Esportes e lazer</option>
-          <option value="Outros">Outros</option>
+          {categoriasDisponiveis.map((categoria) => (
+            <option key={categoria} value={categoria}>
+              {categoria}
+            </option>
+          ))}
         </select>
 
         <select
